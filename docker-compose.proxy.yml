@@ -1,0 +1,22 @@
+# Override for running behind a reverse proxy that terminates TLS and routes by
+# domain — Coolify, Dokploy, Traefik, Caddy, nginx. It stops the services
+# publishing ports on the host: the proxy reaches them over the compose network
+# instead, so nothing is listening on a public interface.
+#
+#   docker compose -f docker-compose.yml -f docker-compose.proxy.yml up -d --build
+#
+# Point the proxy at backend:8080 and mcp-server:8090. Nothing should be able to
+# reach db from outside the compose network.
+services:
+  db:
+    ports: !reset []
+
+  backend:
+    ports: !reset []
+    expose:
+      - "${BACKEND_PORT:-8080}"
+
+  mcp-server:
+    ports: !reset []
+    expose:
+      - "${MCP_PORT:-8090}"
