@@ -29,15 +29,20 @@ GitHub Projects / Issues  (humans plan)
 |---|---|
 | `packages/store` | Postgres schema, `claim_task()` function, event log |
 | `packages/mcp-server` | Streamable-HTTP MCP server; per-lead bearer auth; tools `muster_*` |
-| `packages/backend` | GitHub webhook receiver (signed, idempotent), backoffice/admin API, SSE event stream, debounced store→GitHub mirror |
+| `packages/backend` | GitHub webhook receiver (signed, idempotent), backoffice API and UI, SSE event stream, debounced store→GitHub mirror, nightly reconcile |
 | `packages/channel` | Claude Code channel plugin: tails events and pushes them into the session |
 
 ## Quick start
 ```bash
 cp .env.example .env            # edit secrets
 docker compose up -d db
+./scripts/migrate.sh            # apply packages/store/migrations in order
 (cd packages/backend && npm i && npm run dev)
 (cd packages/mcp-server && npm i && npm run dev)
+
+# check the whole path works: admin API, signed webhook, claim/heartbeat/
+# complete over MCP, findings, events, SSE, revocation
+ADMIN_TOKEN=... GITHUB_WEBHOOK_SECRET=... ./scripts/smoke.sh
 
 # create a project and a lead token (backoffice API)
 curl -s -XPOST localhost:8080/admin/projects -H "Authorization: Bearer $ADMIN_TOKEN" \
@@ -47,6 +52,11 @@ curl -s -XPOST localhost:8080/admin/projects/<project-id>/leads -H "Authorizatio
   -H 'content-type: application/json' -d '{"name":"alice-laptop","expires_in_days":30}'
 # -> { "token": "mstr_..." }  shown once
 ```
+
+Or do the same from the backoffice at **http://localhost:8080/ui/** — projects,
+lead tokens, a live board and the event log, in one page. It asks for
+`ADMIN_TOKEN` and keeps it in `sessionStorage`; put it behind your own auth
+before exposing the backend.
 
 Each developer then, on their machine:
 ```bash

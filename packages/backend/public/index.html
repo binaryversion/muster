@@ -1,0 +1,398 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Muster backoffice</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='4' fill='%237c5cff'/%3E%3Cpath d='M4 11V5l4 3 4-3v6' fill='none' stroke='white' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+<style>
+  :root {
+    --bg: #fbfbfa; --panel: #fff; --ink: #1c1b1a; --dim: #6b6763; --line: #e4e1dd;
+    --accent: #7c5cff; --ok: #1a7f52; --warn: #a8600a; --bad: #b3261e;
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #17161a; --panel: #1f1e23; --ink: #eceaf0; --dim: #9b96a3; --line: #302e36;
+      --accent: #a68cff; --ok: #5fd39b; --warn: #e0a856; --bad: #ff8a80;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font: 14px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  header {
+    display: flex; gap: 12px; align-items: center; flex-wrap: wrap;
+    padding: 12px 20px; border-bottom: 1px solid var(--line); background: var(--panel);
+    position: sticky; top: 0; z-index: 2;
+  }
+  h1 { font-size: 15px; margin: 0; font-weight: 650; letter-spacing: -0.01em; }
+  h1 small { color: var(--dim); font-weight: 400; margin-left: 8px; }
+  main { padding: 20px; display: grid; gap: 20px; max-width: 1400px; }
+  section { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; }
+  section > h2 {
+    font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--dim);
+    margin: 0; padding: 12px 16px; border-bottom: 1px solid var(--line);
+    display: flex; gap: 10px; align-items: center;
+  }
+  section > h2 .spacer { flex: 1; }
+  section > h2 .dim { text-transform: none; letter-spacing: 0; font-weight: 400; }
+  .body { padding: 14px 16px; }
+  .cols { display: grid; gap: 20px; grid-template-columns: minmax(300px, 1fr) minmax(360px, 1.4fr); }
+  @media (max-width: 900px) { .cols { grid-template-columns: 1fr; } main { padding: 12px; } }
+
+  table { width: 100%; border-collapse: collapse; }
+  th, td { text-align: left; padding: 7px 16px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--dim); font-weight: 600; }
+  tr:last-child td { border-bottom: 0; }
+  td.num { text-align: right; font-variant-numeric: tabular-nums; }
+
+  input, select, button, textarea { font: inherit; color: inherit; }
+  input, select {
+    background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 6px 9px; min-width: 0;
+  }
+  input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+  button {
+    background: var(--ink); color: var(--panel); border: 0; border-radius: 6px;
+    padding: 6px 12px; cursor: pointer; font-weight: 550;
+  }
+  button.ghost { background: transparent; color: var(--ink); border: 1px solid var(--line); font-weight: 450; }
+  button.danger { background: transparent; color: var(--bad); border: 1px solid var(--line); font-weight: 450; }
+  button:disabled { opacity: 0.45; cursor: default; }
+  label { display: grid; gap: 4px; font-size: 12px; color: var(--dim); }
+  form.row { display: flex; gap: 8px; align-items: end; flex-wrap: wrap; }
+  form.row label { flex: 1 1 130px; }
+
+  .pill {
+    display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 11px;
+    border: 1px solid var(--line); white-space: nowrap;
+  }
+  .s-ready .pill, .s-backlog .pill { color: var(--dim); }
+  .s-in_progress .pill { color: var(--accent); border-color: currentColor; }
+  .s-review .pill { color: var(--warn); border-color: currentColor; }
+  .s-done .pill { color: var(--ok); border-color: currentColor; }
+  .s-cancelled .pill { color: var(--dim); text-decoration: line-through; }
+
+  .mono { font-family: var(--mono); font-size: 12px; }
+  .dim { color: var(--dim); }
+  .stale { color: var(--bad); }
+  .empty { padding: 22px 16px; color: var(--dim); text-align: center; }
+  #log { max-height: 460px; overflow: auto; }
+  #log td:first-child { white-space: nowrap; }
+  #log .payload { color: var(--dim); word-break: break-word; }
+  #toast {
+    position: fixed; inset: auto 20px 20px auto; background: var(--ink); color: var(--panel);
+    padding: 9px 14px; border-radius: 8px; max-width: 460px; opacity: 0; pointer-events: none;
+    transition: opacity .15s;
+  }
+  #toast.show { opacity: 1; }
+  #token-out {
+    display: none; margin-top: 12px; padding: 10px 12px; border: 1px solid var(--accent);
+    border-radius: 8px; background: var(--bg);
+  }
+  #token-out.show { display: block; }
+  code { font-family: var(--mono); font-size: 12px; word-break: break-all; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Muster <small>backoffice</small></h1>
+  <label style="flex:0 1 320px">
+    admin token
+    <input id="token" type="password" placeholder="ADMIN_TOKEN" autocomplete="off">
+  </label>
+  <label style="flex:0 1 240px">
+    project
+    <select id="project"></select>
+  </label>
+  <span class="spacer" style="flex:1"></span>
+  <label style="flex:0 0 auto; grid-auto-flow: column; align-items: center; gap: 6px">
+    <input id="live" type="checkbox" checked style="min-width:auto"> live
+  </label>
+  <button class="ghost" id="refresh">Refresh</button>
+</header>
+
+<main>
+  <section>
+    <h2>Projects<span class="spacer"></span>
+      <button class="ghost" id="reconcile" title="Diff GitHub against the store now">Reconcile</button>
+    </h2>
+    <div class="body">
+      <form class="row" id="new-project">
+        <label>slug<input name="slug" required pattern="[a-z0-9-]+" placeholder="web"></label>
+        <label>name<input name="name" required placeholder="Web app"></label>
+        <label>github owner<input name="github_owner" placeholder="acme"></label>
+        <label>repos (comma separated)<input name="github_repos" placeholder="acme/web, acme/api"></label>
+        <label>project #<input name="github_project_number" type="number" min="1" placeholder="7"></label>
+        <button>Create</button>
+      </form>
+      <p class="dim" id="project-detail" style="margin:12px 0 0"></p>
+    </div>
+  </section>
+
+  <div class="cols">
+    <section>
+      <h2>Leads</h2>
+      <div class="body">
+        <form class="row" id="new-lead">
+          <label>machine name<input name="name" required placeholder="alice-laptop"></label>
+          <label style="flex:0 1 110px">expires (days)<input name="expires_in_days" type="number" min="1" placeholder="30"></label>
+          <button>Issue token</button>
+        </form>
+        <div id="token-out">
+          <div class="dim" style="font-size:12px">Shown once — only its hash is stored.</div>
+          <code id="token-value"></code>
+          <div style="margin-top:8px"><button class="ghost" id="copy-token">Copy</button></div>
+        </div>
+      </div>
+      <table><thead><tr><th>Name</th><th>Last seen</th><th>Expires</th><th></th></tr></thead>
+        <tbody id="leads"></tbody></table>
+    </section>
+
+    <section>
+      <h2>Board<span class="spacer"></span><span class="dim" id="board-summary"></span></h2>
+      <table><thead><tr><th>Task</th><th>Status</th><th>Claimed by</th><th>Lease</th><th class="num">Tokens</th></tr></thead>
+        <tbody id="board"></tbody></table>
+    </section>
+  </div>
+
+  <section>
+    <h2>Events<span class="spacer"></span><span class="dim" id="event-count"></span></h2>
+    <div id="log"><table><tbody id="events"></tbody></table></div>
+  </section>
+</main>
+
+<div id="toast"></div>
+
+<script>
+// Static page, no data of its own: everything below needs the admin token the
+// operator types in, which is kept in sessionStorage so it dies with the tab.
+// All values from the API (issue titles, lead names, event payloads) are
+// written with textContent, never innerHTML — they come from GitHub and from
+// agents, and this page is not where that text gets to run.
+const $ = (id) => document.getElementById(id);
+const el = (tag, props = {}, ...kids) => {
+  const node = Object.assign(document.createElement(tag), props);
+  for (const kid of kids.flat()) if (kid != null) node.append(kid);
+  return node;
+};
+const td = (text, cls) => el("td", cls ? { textContent: text, className: cls } : { textContent: text });
+
+let token = sessionStorage.getItem("muster-admin-token") || "";
+let projectId = sessionStorage.getItem("muster-project") || "";
+let sinceEvent = 0;
+let logProject = null;
+let seenEvents = 0;
+let chain = Promise.resolve();
+let queued = 0;
+
+$("token").value = token;
+$("token").addEventListener("change", (e) => {
+  token = e.target.value.trim();
+  sessionStorage.setItem("muster-admin-token", token);
+  loadProjects();
+});
+
+function toast(message, bad) {
+  const t = $("toast");
+  t.textContent = message;
+  t.style.background = bad ? "var(--bad)" : "var(--ink)";
+  t.classList.add("show");
+  clearTimeout(toast.timer);
+  toast.timer = setTimeout(() => t.classList.remove("show"), 3200);
+}
+
+async function api(path, options = {}) {
+  if (!token) throw new Error("set the admin token first");
+  const res = await fetch(path, {
+    ...options,
+    headers: { Authorization: "Bearer " + token, ...(options.body ? { "content-type": "application/json" } : {}) }
+  });
+  if (res.status === 401) throw new Error("admin token rejected");
+  if (!res.ok) {
+    let detail = res.status + " " + res.statusText;
+    try { const j = await res.json(); if (j.error) detail = j.error; } catch {}
+    throw new Error(detail);
+  }
+  return res.status === 204 ? null : res.json();
+}
+
+const ago = (iso) => {
+  if (!iso) return "";
+  const secs = (Date.now() - new Date(iso)) / 1000;
+  const abs = Math.abs(secs);
+  const [n, unit] = abs < 60 ? [abs, "s"] : abs < 3600 ? [abs / 60, "m"] : abs < 86400 ? [abs / 3600, "h"] : [abs / 86400, "d"];
+  return (secs < 0 ? "in " : "") + Math.round(n) + unit + (secs < 0 ? "" : " ago");
+};
+
+async function loadProjects() {
+  let projects;
+  try { projects = await api("/admin/projects"); }
+  catch (err) { toast(err.message, true); return; }
+
+  const select = $("project");
+  select.replaceChildren(...projects.map(p => el("option", { value: p.id, textContent: p.slug + " — " + p.name })));
+  if (!projects.some(p => p.id === projectId)) projectId = projects[0]?.id || "";
+  select.value = projectId;
+  sessionStorage.setItem("muster-project", projectId);
+
+  const current = projects.find(p => p.id === projectId);
+  $("project-detail").textContent = current
+    ? [current.github_repos?.length ? "repos: " + current.github_repos.join(", ") : "no repos",
+       current.github_project_number ? "Projects v2 #" + current.github_project_number : "no board wired",
+       current.reconciled_at ? "reconciled " + ago(current.reconciled_at) : "never reconciled"].join("  ·  ")
+    : "";
+
+  await refresh();
+}
+
+$("project").addEventListener("change", (e) => {
+  projectId = e.target.value;
+  sessionStorage.setItem("muster-project", projectId);
+  loadProjects();
+});
+
+function renderBoard(tasks) {
+  const counts = {};
+  for (const t of tasks) counts[t.status] = (counts[t.status] || 0) + 1;
+  $("board-summary").textContent = Object.entries(counts).map(([s, n]) => n + " " + s).join(" · ");
+
+  $("board").replaceChildren(...tasks.map(t => {
+    const where = t.github_repo ? t.github_repo + "#" + t.github_issue_number : "";
+    const expired = t.lease_until && new Date(t.lease_until) < new Date();
+    return el("tr", { className: "s" + "-" + t.status },
+      el("td", {}, el("div", { textContent: t.title }),
+                   el("div", { className: "dim mono", textContent: where })),
+      el("td", {}, el("span", { className: "pill", textContent: t.status })),
+      td(t.claimed_by || "", "dim"),
+      el("td", { className: t.lease_until && expired ? "stale mono" : "dim mono",
+                 textContent: t.lease_until ? (expired ? "expired " : "") + ago(t.lease_until) : "" }),
+      td(t.cost_tokens ? Number(t.cost_tokens).toLocaleString() : "", "num dim"));
+  }));
+  if (!tasks.length) $("board").replaceChildren(el("tr", {}, el("td", { colSpan: 5, className: "empty", textContent: "No tasks yet. They arrive from GitHub issues." })));
+}
+
+function renderLeads(leads) {
+  $("leads").replaceChildren(...leads.map(l => {
+    const revoked = !!l.revoked_at;
+    const expired = l.expires_at && new Date(l.expires_at) < new Date();
+    const revoke = el("button", { className: "danger", textContent: revoked ? "revoked" : "Revoke", disabled: revoked });
+    revoke.addEventListener("click", async () => {
+      if (!confirm(`Revoke ${l.name}? Its next MCP call and its event stream both stop working.`)) return;
+      try { await api("/admin/leads/" + l.id, { method: "DELETE" }); toast("revoked " + l.name); refresh(); }
+      catch (err) { toast(err.message, true); }
+    });
+    return el("tr", {},
+      el("td", {}, el("span", { textContent: l.name, style: revoked ? "text-decoration:line-through" : "" })),
+      td(l.last_seen_at ? ago(l.last_seen_at) : "never", "dim"),
+      el("td", { className: expired ? "stale" : "dim",
+                 textContent: l.expires_at ? (expired ? "expired " : "") + ago(l.expires_at) : "never" }),
+      el("td", {}, revoke));
+  }));
+  if (!leads.length) $("leads").replaceChildren(el("tr", {}, el("td", { colSpan: 4, className: "empty", textContent: "No leads yet." })));
+}
+
+function renderEvents(events) {
+  if (!events.length) return;
+  sinceEvent = events[events.length - 1].id;
+  seenEvents += events.length;
+  $("event-count").textContent = seenEvents + " shown";
+  // Ascending from the API; newest on top here.
+  const rows = events.slice().reverse().map(e => el("tr", {},
+    el("td", { className: "dim mono", textContent: new Date(e.created_at).toLocaleTimeString() }),
+    el("td", {}, el("span", { className: "pill", textContent: e.kind })),
+    td(e.actor, "dim"),
+    td(JSON.stringify(e.payload), "payload mono")));
+  $("events").prepend(...rows);
+  // Keep the log from growing without bound in a tab left open all day.
+  while ($("events").childElementCount > 300) $("events").lastElementChild.remove();
+}
+
+// Refreshes run one at a time and in order: a project switch must not be
+// dropped because a poll was already in flight, but a slow backend must not let
+// the 3s timer pile requests up either, so at most one waits behind the runner.
+function refresh() {
+  if (queued > 1) return chain;
+  queued++;
+  chain = chain.catch(() => {}).then(doRefresh).finally(() => { queued--; });
+  return chain;
+}
+
+async function doRefresh() {
+  if (!projectId || !token) return;
+  if (logProject !== projectId) {
+    // Switching projects starts the log over, and doing it here rather than in
+    // loadProjects keeps it ordered with respect to whatever refresh is already
+    // queued — otherwise that one advances sinceEvent past the rows just cleared.
+    logProject = projectId; sinceEvent = 0; seenEvents = 0;
+    $("events").replaceChildren();
+  }
+  try {
+    const [board, leads, events] = await Promise.all([
+      api(`/admin/projects/${projectId}/board`),
+      api(`/admin/projects/${projectId}/leads`),
+      api(`/admin/projects/${projectId}/events?since=${sinceEvent}`)
+    ]);
+    renderBoard(board); renderLeads(leads); renderEvents(events);
+  } catch (err) {
+    toast(err.message, true);
+    $("live").checked = false;   // stop hammering a backend that is saying no
+  }
+}
+
+$("refresh").addEventListener("click", refresh);
+setInterval(() => { if ($("live").checked) refresh(); }, 3000);
+
+$("new-project").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const form = new FormData(e.target);
+  const body = {
+    slug: form.get("slug").trim(),
+    name: form.get("name").trim(),
+    github_repos: String(form.get("github_repos") || "").split(",").map(s => s.trim()).filter(Boolean)
+  };
+  if (form.get("github_owner")) body.github_owner = String(form.get("github_owner")).trim();
+  if (form.get("github_project_number")) body.github_project_number = Number(form.get("github_project_number"));
+  try {
+    const created = await api("/admin/projects", { method: "POST", body: JSON.stringify(body) });
+    e.target.reset();
+    projectId = created.id;
+    toast("created " + created.slug);
+    loadProjects();
+  } catch (err) { toast(err.message, true); }
+});
+
+$("new-lead").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  if (!projectId) return toast("pick a project first", true);
+  const form = new FormData(e.target);
+  const body = { name: String(form.get("name")).trim() };
+  if (form.get("expires_in_days")) body.expires_in_days = Number(form.get("expires_in_days"));
+  try {
+    const lead = await api(`/admin/projects/${projectId}/leads`, { method: "POST", body: JSON.stringify(body) });
+    e.target.reset();
+    $("token-value").textContent = lead.token;
+    $("token-out").classList.add("show");
+    refresh();
+  } catch (err) { toast(err.message, true); }
+});
+
+$("copy-token").addEventListener("click", async () => {
+  try { await navigator.clipboard.writeText($("token-value").textContent); toast("copied"); }
+  catch { toast("copy failed — select it by hand", true); }
+});
+
+$("reconcile").addEventListener("click", async () => {
+  const full = confirm("Full scan? OK runs a complete scan (also reports orphaned tasks); Cancel runs the usual incremental pass.");
+  $("reconcile").disabled = true;
+  try { await api("/admin/reconcile" + (full ? "?full=1" : ""), { method: "POST" }); toast("reconcile finished"); refresh(); }
+  catch (err) { toast(err.message, true); }
+  finally { $("reconcile").disabled = false; }
+});
+
+if (token) loadProjects();
+</script>
+</body>
+</html>

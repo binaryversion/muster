@@ -1,0 +1,6 @@
+# The Dockerfile runs npm ci and then COPY . ., so without this the host's
+# node_modules lands on top of the ones just installed for the image.
+node_modules
+dist
+npm-debug.log
+.env

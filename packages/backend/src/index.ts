@@ -1,4 +1,6 @@
 import express from "express";
+import { fileURLToPath } from "node:url";
+import { dirname, join } from "node:path";
 import { githubWebhookRouter } from "./webhooks/github.js";
 import { adminRouter } from "./admin/index.js";
 import { eventsRouter } from "./events/sse.js";
@@ -10,6 +12,12 @@ const app = express();
 app.use(express.json({ limit: "2mb", verify: (req: any, _res, buf) => { req.rawBody = buf.toString("utf8"); } }));
 
 app.get("/healthz", (_req, res) => res.send("ok"));
+
+// Backoffice UI. Served outside /admin because a browser cannot put a bearer
+// token on the initial navigation; the page itself carries no data and asks the
+// operator for ADMIN_TOKEN, which every /admin/* call it makes still requires.
+app.use("/ui", express.static(join(dirname(fileURLToPath(import.meta.url)), "..", "public")));
+app.get("/", (_req, res) => res.redirect("/ui/"));
 app.use(githubWebhookRouter);
 app.use(adminRouter);
 app.use(eventsRouter);
