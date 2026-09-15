@@ -49,18 +49,28 @@ eventsRouter.get("/events/stream", async (req, res) => {
 
   let since = await resolveSince(lead.project_id, req);
   let sending = false;
+  let again = false;
 
-  const tick = async () => {
-    // A slow write must not overlap the next poll, or the same rows go twice.
-    if (sending) return;
+  const tick = async (): Promise<void> => {
+    // Two overlapping reads would send the same rows twice, so only one runs.
+    // A wake that arrives while one is in flight is remembered rather than
+    // dropped: it may have landed after that read's snapshot, and dropping it
+    // would leave the event waiting for the fallback poll.
+    if (sending) { again = true; return; }
     sending = true;
     try {
-      const rows = await query<any>(
-        "SELECT * FROM events WHERE project_id=$1 AND id > $2 ORDER BY id LIMIT 100",
-        [lead.project_id, since]);
-      for (const e of rows) {
-        since = e.id;
-        res.write(`id: ${e.id}\nevent: ${e.kind}\ndata: ${JSON.stringify(e)}\n\n`);
+      // A batch is capped, so keep going while there is more to send.
+      for (;;) {
+        const rows = await query<any>(
+          "SELECT * FROM events WHERE project_id=$1 AND id > $2 ORDER BY id LIMIT 100",
+          [lead.project_id, since]);
+        for (const e of rows) {
+          since = e.id;
+          res.write(`id: ${e.id}\nevent: ${e.kind}\ndata: ${JSON.stringify(e)}\n\n`);
+        }
+        if (rows.length === 100) continue;   // there is probably more
+        if (!again) break;
+        again = false;
       }
     } finally {
       sending = false;
