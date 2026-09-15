@@ -7,7 +7,9 @@
   "scripts": {
     "build": "tsc -p .",
     "start": "node dist/index.js",
-    "dev": "tsx watch src/index.ts"
+    "dev": "tsx watch src/index.ts",
+    "test": "npm run build && node --test 'dist/**/*.test.js'",
+    "prebuild": "bash ../../scripts/sync-shared.sh 2>/dev/null || true"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.17.0",

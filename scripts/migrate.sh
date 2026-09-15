@@ -1,11 +1,22 @@
 #!/usr/bin/env bash
 # Apply packages/store/migrations/*.sql in order, once each.
 #
-# docker-compose mounts the migrations directory into the postgres image's
-# docker-entrypoint-initdb.d, which only runs on a *fresh* volume. That is fine
-# for a first `docker compose up -d db`, but it never applies migrations added
-# later. This script is the path that always works; it detects the initdb case
-# and backfills 001 rather than trying to re-run it.
+# This is the only path that applies migrations. The compose file runs it as a
+# one-shot `migrate` service before the backend or the MCP server start.
+#
+# Each migration may declare a probe:
+#
+#   -- applied-if: SELECT to_regclass('public.tasks') IS NOT NULL
+#
+# If the probe says the migration's effect is already present, it is recorded as
+# applied instead of being run. That covers any database whose schema arrived by
+# some route other than this script — notably the postgres image's
+# docker-entrypoint-initdb.d, which earlier versions of the compose file mounted
+# the migrations into. That directory runs only on a *fresh* volume, so it looked
+# like it worked and then silently skipped everything added later; the mount is
+# gone, but installs created that way still exist and would otherwise fail on
+# CREATE TABLE. It also makes the runner safe against a schema someone applied
+# by hand.
 #
 #   DATABASE_URL=postgres://muster:muster@localhost:5432/muster ./scripts/migrate.sh
 set -euo pipefail
@@ -25,20 +36,23 @@ psql_q -c "CREATE TABLE IF NOT EXISTS schema_migrations (
              filename   text PRIMARY KEY,
              applied_at timestamptz NOT NULL DEFAULT now())" >/dev/null
 
-# Fresh docker volume: the entrypoint already ran 001 before we ever connected.
-# Record it as applied so we do not fail on CREATE TABLE.
-if [ "$(psql_q -c "SELECT count(*) FROM schema_migrations")" = "0" ] &&
-   [ "$(psql_q -c "SELECT to_regclass('public.tasks') IS NOT NULL")" = "t" ]; then
-  echo "migrate: existing schema found, recording 001_init.sql as already applied"
-  psql_q -c "INSERT INTO schema_migrations (filename) VALUES ('001_init.sql')" >/dev/null
-fi
-
 applied=0
+backfilled=0
 for path in "$MIGRATIONS"/*.sql; do
   file="$(basename "$path")"
   if [ "$(psql_q -c "SELECT count(*) FROM schema_migrations WHERE filename = '$file'")" != "0" ]; then
     continue
   fi
+
+  # Already there by another route? Record it rather than re-running it.
+  probe="$(sed -n 's/^-- applied-if:[[:space:]]*//p' "$path" | head -1)"
+  if [ -n "$probe" ] && [ "$(psql_q -c "$probe" 2>/dev/null || echo f)" = "t" ]; then
+    echo "migrate: $file is already present; recording it as applied"
+    psql_q -c "INSERT INTO schema_migrations (filename) VALUES ('$file')" >/dev/null
+    backfilled=$((backfilled + 1))
+    continue
+  fi
+
   echo "migrate: applying $file"
   # Each migration runs in one transaction together with its bookkeeping row,
   # so a failure leaves nothing half-applied.
@@ -47,4 +61,5 @@ for path in "$MIGRATIONS"/*.sql; do
   applied=$((applied + 1))
 done
 
+[ "$backfilled" -gt 0 ] && echo "migrate: recorded $backfilled pre-existing migration(s)"
 if [ "$applied" -eq 0 ]; then echo "migrate: up to date"; else echo "migrate: applied $applied migration(s)"; fi

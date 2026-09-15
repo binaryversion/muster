@@ -116,6 +116,17 @@ Two things to check on your platform:
    start without App credentials and say so once in the log rather than failing
    on every tick.
 
+## Running more than one backend
+
+Sessions and login throttling live in Postgres, so a second replica works:
+sign in against one and the cookie is valid on all of them, sign out and it dies
+everywhere, and a client's failed logins are counted once rather than once per
+process.
+
+The GitHub mirror and the reconcile are the exception — both assume a single
+writer. Run them on one instance (`GITHUB_SYNC_ENABLED` / `GITHUB_RECONCILE_ENABLED`
+true there, false elsewhere) and the rest can scale freely.
+
 ## Upgrading
 
 ```bash
@@ -126,6 +137,34 @@ docker compose up -d --build
 `migrate` runs again on every deploy and is a no-op when there is nothing new.
 Migrations are tracked in a `schema_migrations` table, so an existing database
 is picked up rather than re-initialised.
+
+### How migrate.sh handles a schema it did not create
+
+Each migration declares a probe:
+
+```sql
+-- applied-if: SELECT to_regclass('public.tasks') IS NOT NULL
+```
+
+If the probe says the migration's effect is already there, it is recorded as
+applied instead of being run. Every migration is also written to be re-runnable
+— `IF NOT EXISTS` throughout, triggers dropped before being created — so a
+database in a half-applied state converges rather than erroring out.
+
+This exists because early versions of this compose file mounted
+`packages/store/migrations` into the postgres image's
+`docker-entrypoint-initdb.d`. That directory runs only when the data directory
+is empty, which is a trap worth naming: the first `docker compose up` applies
+everything and it looks like it works, then every migration added afterwards is
+silently skipped and the failure surfaces much later as a missing column at
+runtime.
+
+The mount is gone — the one-shot `migrate` service replaced it — but installs
+created that way still exist, and their schema is at whatever version was in the
+directory on the day the volume was created. The probes work that out per
+migration rather than assuming, which an earlier "record 001 as applied" shortcut
+got wrong: it left every later migration to be re-run against a schema that
+already had it.
 
 ## Backups
 

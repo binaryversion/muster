@@ -226,6 +226,22 @@ found=$(mcp "$TOKEN_B" muster_search_findings '{"q":"smoke","limit":5}')
 [ "$(echo "$found" | jq -r '(.result.structuredContent.findings // []) | length')" -gt 0 ] \
   && pass "lead B can read lead A's finding" || fail "search_findings returned nothing"
 
+# Full text, not substring: the finding says "exercises", the query says
+# "exercising". A lead asking in their own words has to find it.
+stemmed=$(mcp "$TOKEN_B" muster_search_findings '{"q":"exercising the claim path","limit":5}')
+[ "$(echo "$stemmed" | jq -r '(.result.structuredContent.findings // []) | length')" -gt 0 ] \
+  && pass "search stems, so a reworded query still matches" \
+  || fail "search did not match a stemmed query"
+
+# And the other half of what agents search for: an exact literal that full text
+# would tokenise away.
+literal=$(mcp "$TOKEN_A" muster_add_finding \
+  "$(jq -nc --arg r "$RUN" '{content:("Run " + $r + ": the container needs --no-sandbox to start at all."),tags:["smoke"]}')" 2>/dev/null || true)
+flag=$(mcp "$TOKEN_B" muster_search_findings '{"q":"--no-sandbox","limit":5}')
+[ "$(echo "$flag" | jq -r '(.result.structuredContent.findings // []) | length')" -gt 0 ] \
+  && pass "search still matches an exact flag full text would drop" \
+  || fail "literal search fallback did not match"
+
 events=$(mcp "$TOKEN_A" muster_recent_events '{"since_id":0,"limit":50}')
 kinds=$(echo "$events" | jq -r '(.result.structuredContent.events // []) | map(.kind) | unique | join(",")')
 for want in task.claimed task.review finding.added; do
@@ -307,6 +323,13 @@ curl -sS -o /dev/null -X POST "$BACKEND_URL/admin/logout" -H "Cookie: muster_adm
 
 [ "$(curl -sS -o /dev/null -w '%{http_code}' "$BACKEND_URL/ui/")" = "200" ] \
   && pass "the backoffice page is served" || fail "the backoffice page is missing"
+
+# A full scan can take minutes; the route must hand back control, not hold the
+# request open until a proxy times it out.
+[ "$(curl -sS -o /dev/null -w '%{http_code}' -X POST "$BACKEND_URL/admin/reconcile" \
+     -H "Authorization: Bearer $ADMIN_PASSWORD")" = "202" ] \
+  && pass "reconcile starts in the background and answers 202" \
+  || fail "reconcile did not answer 202"
 
 step "8. revocation"
 lead_a_id=$(admin GET "/admin/projects/$PROJECT_ID/leads" | jq -r '.[] | select(.name == "smoke-lead-a") | .id')

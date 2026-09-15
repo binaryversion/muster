@@ -83,14 +83,19 @@ test("digestsEqual is length-safe and does not match near misses", () => {
   assert.equal(digestsEqual(a, "a".repeat(32)), false);   // would throw if unguarded
 });
 
-test("the two copies of crypto.ts are byte-identical", () => {
-  // They are separate npm packages with separate installs, so the module is
-  // duplicated. If they drift, leads authenticate against one service and not
-  // the other. CI checks this too; this makes it fail locally first.
-  // npm test runs from the package root; the compiled test lives under dist/,
-  // so resolve the sources from cwd rather than from import.meta.url.
+test("both copies match packages/shared, the source of truth", () => {
+  // Each package installs separately and each Dockerfile's build context is its
+  // own directory, so the module is copied rather than depended on. Drift means
+  // leads authenticating against one service and not the other.
+  //
+  // The real gate is scripts/sync-shared.sh --check, which CI runs before
+  // anything is built. By the time this test runs the prebuild hook has already
+  // regenerated the copies, so what this actually guards is the sync script
+  // itself: if it stopped copying, this fails.
   const root = process.cwd();
-  const backend = readFileSync(join(root, "src/crypto.ts"), "utf8");
-  const mcp = readFileSync(join(root, "../mcp-server/src/crypto.ts"), "utf8");
-  assert.equal(mcp, backend, "packages/mcp-server/src/crypto.ts has drifted from the backend copy");
+  const shared = readFileSync(join(root, "../shared/crypto.ts"), "utf8");
+  for (const pkg of ["backend", "mcp-server"]) {
+    const copy = readFileSync(join(root, `../${pkg}/src/crypto.ts`), "utf8");
+    assert.equal(copy, shared, `packages/${pkg}/src/crypto.ts has drifted from packages/shared/crypto.ts`);
+  }
 });

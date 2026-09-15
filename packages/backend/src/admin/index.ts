@@ -18,7 +18,7 @@ import { randomBytes } from "node:crypto";
 import { z } from "zod";
 import { query } from "../db.js";
 import { digestForStorage } from "../crypto.js";
-import { reconcileOnce } from "../sync/reconcile.js";
+import { startReconcile, reconcileRunning } from "../sync/reconcile.js";
 import {
   adminSecret, requireAdmin, setSessionCookie, clearSessionCookie,
   loginThrottle, noteLoginFailure, noteLoginSuccess, lockedOut, sameSecret
@@ -34,28 +34,28 @@ const wrap = (fn: (req: Request, res: Response) => Promise<unknown>) =>
   (req: Request, res: Response, next: NextFunction) => { fn(req, res).catch(next); };
 
 // Logging in is the one thing you can reach without already being in.
-adminRouter.post("/admin/login", (req, res) => {
+adminRouter.post("/admin/login", wrap(async (req, res) => {
   const secret = adminSecret();
   if (!secret) return res.status(503).json({ error: "ADMIN_PASSWORD is not set on the backend" });
-  if (lockedOut(req)) {
-    return res.status(429).json({ error: `too many attempts, wait ${loginThrottle(req)}s` });
+  if (await lockedOut(req)) {
+    return res.status(429).json({ error: `too many attempts, wait ${await loginThrottle(req)}s` });
   }
   const password = typeof req.body?.password === "string" ? req.body.password : "";
   if (!password || password.length > 512 || !sameSecret(password, secret)) {
-    noteLoginFailure(req);
+    await noteLoginFailure(req);
     // One message for a wrong password and for no password: nothing here should
     // help someone work out how close they are.
     return res.status(401).json({ error: "wrong password" });
   }
-  noteLoginSuccess(req);
-  setSessionCookie(req, res);
+  await noteLoginSuccess(req);
+  await setSessionCookie(req, res);
   res.json({ ok: true });
-});
+}));
 
-adminRouter.post("/admin/logout", (req, res) => {
-  clearSessionCookie(req, res);
+adminRouter.post("/admin/logout", wrap(async (req, res) => {
+  await clearSessionCookie(req, res);
   res.json({ ok: true });
-});
+}));
 
 adminRouter.use("/admin", requireAdmin);
 
@@ -156,10 +156,21 @@ adminRouter.get("/admin/projects/:id/events", wrap(async (req, res) =>
 
 // Run a reconcile pass now instead of waiting for the nightly cron. ?full=1
 // forces a complete scan, which is the only pass that reports orphans.
-adminRouter.post("/admin/reconcile", wrap(async (req, res) => {
-  await reconcileOnce({ full: req.query.full === "1" || req.query.full === "true" });
-  res.json({ ok: true });
-}));
+//
+// Starts the job and answers immediately. A full scan paginates every issue in
+// every repo of every project, which on a real org outlives any reverse proxy's
+// timeout — the operator would get a 502 while the job was still running. The
+// result arrives through the event log as reconcile.completed, which the
+// backoffice already tails.
+adminRouter.post("/admin/reconcile", (req, res) => {
+  const full = req.query.full === "1" || req.query.full === "true";
+  if (!startReconcile({ full })) {
+    return res.status(409).json({ error: "a reconcile pass is already running" });
+  }
+  res.status(202).json({ started: true, full });
+});
+
+adminRouter.get("/admin/reconcile", (_req, res) => res.json({ running: reconcileRunning() }));
 
 // Turn a bad body into 400 rather than a 500 with a stack trace.
 adminRouter.use("/admin", (err: any, _req: Request, res: Response, next: NextFunction) => {

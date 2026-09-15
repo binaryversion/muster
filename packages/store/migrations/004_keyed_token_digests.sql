@@ -1,3 +1,4 @@
+-- applied-if: SELECT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='leads' AND column_name='token_alg')
 -- Key the lead token digests.
 --
 -- token_hash was a bare SHA-256 of the token. Tokens are 24 random bytes so
@@ -9,7 +10,7 @@
 -- 'sha256' algorithm and still authenticate, and each is upgraded in place the
 -- next time its token is presented, which is the one moment the plaintext is
 -- available to re-digest.
-ALTER TABLE leads ADD COLUMN token_alg text NOT NULL DEFAULT 'sha256';
+ALTER TABLE leads ADD COLUMN IF NOT EXISTS token_alg text NOT NULL DEFAULT 'sha256';
 
 COMMENT ON COLUMN leads.token_hash IS
   'Digest of the bearer token. Never the token itself, in any recoverable form.';

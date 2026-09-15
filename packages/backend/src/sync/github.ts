@@ -15,7 +15,7 @@
  * being lost.
  */
 import { query } from "../db.js";
-import { makeApp, githubConfigured } from "../github/app.js";
+import { makeApp, githubConfigured, circuitOpen, noteGithubFailure, noteGithubSuccess } from "../github/app.js";
 import { ensureBoardMetadata, optionIdFor, pushStatuses, resolveItemIds,
          type ProjectRow, type StatusUpdate } from "./projects.js";
 
@@ -122,10 +122,15 @@ export async function syncOnce() {
 
   if (process.env.GITHUB_SYNC_LABELS !== "false") {
     for (const task of dirty) {
+      // A repo that has failed repeatedly is skipped rather than retried on
+      // every tick; its tasks stay dirty and go again once the breaker closes.
+      if (circuitOpen(task.github_repo)) continue;
       try {
         await mirrorLabels(await octokitFor(task.github_repo), task);
+        noteGithubSuccess(task.github_repo);
         mirrored.add(task.id);
       } catch (err: any) {
+        noteGithubFailure(task.github_repo);
         console.error(`sync: labels failed for ${task.github_repo}#${task.github_issue_number}:`,
                       err?.message ?? err);
       }
@@ -141,11 +146,14 @@ export async function syncOnce() {
 
   for (const project of projects) {
     const tasks = dirty.filter(t => t.project_id === project.id);
+    if (!tasks.length || circuitOpen("project:" + project.id)) continue;
     // Any repo in the project reaches the same installation, so borrow one.
     try {
       const written = await mirrorProjectStatus(await octokitFor(tasks[0].github_repo), project, tasks);
+      noteGithubSuccess("project:" + project.id);
       for (const id of written) mirrored.add(id);
     } catch (err: any) {
+      noteGithubFailure("project:" + project.id);
       console.error(`sync: Projects v2 write-back failed for project ${project.id}:`, err?.message ?? err);
     }
   }

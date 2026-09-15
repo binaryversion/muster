@@ -7,12 +7,12 @@ import assert from "node:assert/strict";
 import { planReconcile, fetchIssues, type IssueSnapshot, type StoreTask } from "./reconcile.js";
 
 const task = (over: Partial<StoreTask> = {}): StoreTask => ({
-  id: "t1", title: "Wire up the thing", body: "details", status: "ready",
+  id: "t1", title: "Wire up the thing", body: "details", status: "ready", priority: 3,
   github_repo: "acme/web", github_issue_number: 1, ...over
 });
 const issue = (over: Partial<IssueSnapshot> = {}): IssueSnapshot => ({
   repo: "acme/web", number: 1, node_id: "I_1",
-  title: "Wire up the thing", body: "details", state: "open", ...over
+  title: "Wire up the thing", body: "details", state: "open", priority: 3, ...over
 });
 
 test("an issue the store never saw is created", () => {
@@ -36,6 +36,14 @@ test("drifted title or body is an update", () => {
   assert.deepEqual(planReconcile([task()], [issue({ body: "more detail" })]).map(a => a.kind), ["update"]);
   // A null body in the store and an empty one on GitHub are the same thing.
   assert.deepEqual(planReconcile([task({ body: null })], [issue({ body: "" })]), []);
+});
+
+test("a priority change on GitHub is an update", () => {
+  // GitHub owns priority, so a label added while the webhook was down has to be
+  // picked up here or the task sorts wrong forever.
+  assert.deepEqual(planReconcile([task({ priority: 3 })], [issue({ priority: 1 })]).map(a => a.kind),
+    ["update"]);
+  assert.deepEqual(planReconcile([task({ priority: 1 })], [issue({ priority: 1 })]), []);
 });
 
 test("agent-owned status is left alone", () => {
@@ -75,16 +83,16 @@ test("fetchIssues drops pull requests and normalises the shape", async () => {
       assert.equal(params.state, "all");
       assert.equal(params.since, "2026-09-01T00:00:00.000Z");
       return [
-        { number: 1, node_id: "I_1", title: "An issue", body: "b", state: "open" },
+        { number: 1, node_id: "I_1", title: "An issue", body: "b", state: "open", labels: [{ name: "P1" }] },
         { number: 2, node_id: "PR_2", title: "A PR", body: "b", state: "open", pull_request: { url: "…" } },
-        { number: 3, node_id: "I_3", title: "Closed one", body: null, state: "closed" }
+        { number: 3, node_id: "I_3", title: "Closed one", body: null, state: "closed", labels: [] }
       ];
     }
   };
   const issues = await fetchIssues(octokit, "acme/web", "2026-09-01T00:00:00.000Z");
   assert.deepEqual(issues, [
-    { repo: "acme/web", number: 1, node_id: "I_1", title: "An issue", body: "b", state: "open" },
-    { repo: "acme/web", number: 3, node_id: "I_3", title: "Closed one", body: "", state: "closed" }
+    { repo: "acme/web", number: 1, node_id: "I_1", title: "An issue", body: "b", state: "open", priority: 1 },
+    { repo: "acme/web", number: 3, node_id: "I_3", title: "Closed one", body: "", state: "closed", priority: 3 }
   ]);
 });
 

@@ -6,10 +6,10 @@
 import { Router } from "express";
 import { query } from "../db.js";
 import { candidateDigests } from "../crypto.js";
+import { subscribe, FALLBACK_POLL_MS } from "./bus.js";
 
 export const eventsRouter = Router();
 
-const POLL_MS = 2000;
 const KEEPALIVE_MS = 25_000;
 
 async function resolveSince(projectId: string, req: { header(n: string): string | undefined; query: any }) {
@@ -49,18 +49,28 @@ eventsRouter.get("/events/stream", async (req, res) => {
 
   let since = await resolveSince(lead.project_id, req);
   let sending = false;
+  let again = false;
 
-  const tick = async () => {
-    // A slow write must not overlap the next poll, or the same rows go twice.
-    if (sending) return;
+  const tick = async (): Promise<void> => {
+    // Two overlapping reads would send the same rows twice, so only one runs.
+    // A wake that arrives while one is in flight is remembered rather than
+    // dropped: it may have landed after that read's snapshot, and dropping it
+    // would leave the event waiting for the fallback poll.
+    if (sending) { again = true; return; }
     sending = true;
     try {
-      const rows = await query<any>(
-        "SELECT * FROM events WHERE project_id=$1 AND id > $2 ORDER BY id LIMIT 100",
-        [lead.project_id, since]);
-      for (const e of rows) {
-        since = e.id;
-        res.write(`id: ${e.id}\nevent: ${e.kind}\ndata: ${JSON.stringify(e)}\n\n`);
+      // A batch is capped, so keep going while there is more to send.
+      for (;;) {
+        const rows = await query<any>(
+          "SELECT * FROM events WHERE project_id=$1 AND id > $2 ORDER BY id LIMIT 100",
+          [lead.project_id, since]);
+        for (const e of rows) {
+          since = e.id;
+          res.write(`id: ${e.id}\nevent: ${e.kind}\ndata: ${JSON.stringify(e)}\n\n`);
+        }
+        if (rows.length === 100) continue;   // there is probably more
+        if (!again) break;
+        again = false;
       }
     } finally {
       sending = false;
@@ -68,10 +78,20 @@ eventsRouter.get("/events/stream", async (req, res) => {
   };
 
   await tick();
-  const poll = setInterval(() => tick().catch(err => console.error("sse poll error", err)), POLL_MS);
+
+  // Pushed: one LISTEN connection for the process wakes this stream when an
+  // event lands for its project.
+  const unsubscribe = subscribe(lead.project_id,
+    () => { tick().catch(err => console.error("sse push error", err)); });
+
+  // And still polled, slowly. A notification can be missed — the LISTEN
+  // connection can drop, and pg_notify is not delivered to a client that is not
+  // connected at that moment — so this is the floor that guarantees delivery
+  // rather than the mechanism that provides it.
+  const poll = setInterval(() => tick().catch(err => console.error("sse poll error", err)), FALLBACK_POLL_MS);
   // Comment frames keep idle proxies from tearing the connection down.
   const keepalive = setInterval(() => res.write(": keepalive\n\n"), KEEPALIVE_MS);
-  const stop = () => { clearInterval(poll); clearInterval(keepalive); };
+  const stop = () => { unsubscribe(); clearInterval(poll); clearInterval(keepalive); };
   req.on("close", stop);
   res.on("close", stop);
 });

@@ -8,10 +8,12 @@
     "build": "tsc -p .",
     "start": "node dist/index.js",
     "dev": "tsx watch src/index.ts",
-    "test": "npm run build && node --test 'dist/**/*.test.js'"
+    "test": "npm run build && node --test 'dist/**/*.test.js'",
+    "prebuild": "bash ../../scripts/sync-shared.sh 2>/dev/null || true"
   },
   "dependencies": {
     "@octokit/app": "^15.1.0",
+    "@octokit/plugin-throttling": "^11.0.5",
     "@octokit/webhooks": "^13.3.0",
     "croner": "^10.0.1",
     "express": "^4.21.0",

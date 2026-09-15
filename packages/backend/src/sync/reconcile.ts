@@ -13,6 +13,8 @@
 import { Cron } from "croner";
 import { query, emit } from "../db.js";
 import { makeApp, githubConfigured } from "../github/app.js";
+import { priorityFromLabels } from "../github/issue.js";
+import { syncDependencies } from "../github/deps.js";
 
 export interface IssueSnapshot {
   repo: string;
@@ -22,6 +24,8 @@ export interface IssueSnapshot {
   body: string;
   /** GitHub's view, which wins for open/closed. */
   state: "open" | "closed";
+  /** Derived from the issue's labels; GitHub owns it. */
+  priority: number;
 }
 
 export interface StoreTask {
@@ -29,6 +33,7 @@ export interface StoreTask {
   title: string;
   body: string | null;
   status: string;
+  priority: number;
   github_repo: string;
   github_issue_number: number;
 }
@@ -74,9 +79,10 @@ export function planReconcile(tasks: StoreTask[], issues: IssueSnapshot[], full 
     } else if (issue.state === "open" && task.status === "done") {
       // issues.reopened never landed.
       actions.push({ kind: "reopen", taskId: task.id, issue });
-    } else if (task.title !== issue.title || (task.body ?? "") !== issue.body) {
-      // issues.edited never landed. Never reported alongside a state change:
-      // the close/reopen writes the text too.
+    } else if (task.title !== issue.title || (task.body ?? "") !== issue.body
+               || Number(task.priority) !== issue.priority) {
+      // issues.edited or a label change never landed. Never reported alongside
+      // a state change: close/reopen writes the text and priority too.
       actions.push({ kind: "update", taskId: task.id, issue });
     }
   }
@@ -104,12 +110,14 @@ export async function applyPlan(projectId: string, actions: ReconcileAction[]): 
       case "create": {
         const i = action.issue;
         const rows = await query<{ id: string }>(
-          `INSERT INTO tasks (project_id, title, body, source, github_repo, github_issue_number, github_node_id, status)
-           VALUES ($1,$2,$3,'human',$4,$5,$6,$7::task_status)
+          `INSERT INTO tasks (project_id, title, body, source, github_repo, github_issue_number, github_node_id, status, priority)
+           VALUES ($1,$2,$3,'human',$4,$5,$6,$7::task_status,$8)
            ON CONFLICT (github_repo, github_issue_number) DO NOTHING
            RETURNING id`,
-          [projectId, i.title, i.body, i.repo, i.number, i.node_id, i.state === "closed" ? "done" : "ready"]);
+          [projectId, i.title, i.body, i.repo, i.number, i.node_id,
+           i.state === "closed" ? "done" : "ready", i.priority]);
         if (!rows[0]) break;   // a webhook beat us to it between plan and apply
+        await syncDependencies(projectId, rows[0].id, i.repo, i.body);
         counts.created++;
         await emit(projectId, "task.recovered", "reconcile",
           { task_id: rows[0].id, repo: i.repo, issue: i.number, title: i.title,
@@ -117,15 +125,17 @@ export async function applyPlan(projectId: string, actions: ReconcileAction[]): 
         break;
       }
       case "update":
-        await query("UPDATE tasks SET title=$2, body=$3 WHERE id=$1",
-          [action.taskId, action.issue.title, action.issue.body]);
+        await query("UPDATE tasks SET title=$2, body=$3, priority=$4 WHERE id=$1",
+          [action.taskId, action.issue.title, action.issue.body, action.issue.priority]);
+        // The body changed, so what it declares may have changed with it.
+        await syncDependencies(projectId, action.taskId, action.issue.repo, action.issue.body);
         counts.updated++;
         break;
       case "close":
         // Same effect as the issues.closed webhook: done, and the lease goes.
         await query(
-          `UPDATE tasks SET status='done', claimed_by=NULL, lease_until=NULL, title=$2, body=$3
-           WHERE id=$1`, [action.taskId, action.issue.title, action.issue.body]);
+          `UPDATE tasks SET status='done', claimed_by=NULL, lease_until=NULL, title=$2, body=$3, priority=$4
+           WHERE id=$1`, [action.taskId, action.issue.title, action.issue.body, action.issue.priority]);
         counts.closed++;
         await emit(projectId, "task.done", "reconcile",
           { task_id: action.taskId, repo: action.issue.repo, issue: action.issue.number,
@@ -134,8 +144,8 @@ export async function applyPlan(projectId: string, actions: ReconcileAction[]): 
       case "reopen":
         // Back into the pool, unclaimed. It is not in progress until someone claims it.
         await query(
-          `UPDATE tasks SET status='ready', claimed_by=NULL, lease_until=NULL, title=$2, body=$3
-           WHERE id=$1`, [action.taskId, action.issue.title, action.issue.body]);
+          `UPDATE tasks SET status='ready', claimed_by=NULL, lease_until=NULL, title=$2, body=$3, priority=$4
+           WHERE id=$1`, [action.taskId, action.issue.title, action.issue.body, action.issue.priority]);
         counts.reopened++;
         await emit(projectId, "task.released", "reconcile",
           { task_id: action.taskId, note: `issue ${action.issue.repo}#${action.issue.number} was reopened on GitHub` });
@@ -166,15 +176,56 @@ export async function fetchIssues(octokit: Paginating, repo: string, since: stri
     .map((i: any): IssueSnapshot => ({
       repo, number: i.number, node_id: i.node_id,
       title: i.title, body: i.body ?? "",
-      state: i.state === "closed" ? "closed" : "open"
+      state: i.state === "closed" ? "closed" : "open",
+      priority: priorityFromLabels(i.labels)
     }));
+}
+
+/**
+ * Is a pass running right now? The scheduled run is guarded by croner's
+ * `protect`, but the admin route is a button on a web page — two clicks would
+ * otherwise interleave two full scans, doubling the API spend and racing on
+ * `reconciled_at`.
+ */
+let running = false;
+export const reconcileRunning = () => running;
+
+/** Start a pass unless one is already going. Returns false if it was refused. */
+export function startReconcile(opts: { full?: boolean } = {}): boolean {
+  if (running) return false;
+  running = true;
+  reconcileOnce(opts)
+    .catch(err => console.error("reconcile error", err))
+    .finally(() => { running = false; });
+  return true;
 }
 
 /**
  * One pass over every project. `full` forces a complete scan, which is the only
  * way orphans are noticed; the scheduled run is incremental after the first.
  */
+/**
+ * Nothing ever pruned `events`, so the table and everything in it grew without
+ * bound. That matters beyond disk: event payloads carry finding text, and a
+ * finding is the one place an agent can paste a credential by accident. Bounded
+ * retention bounds that exposure too.
+ *
+ * Findings themselves are kept — they are the point of the tool. Only the log of
+ * them ages out, and `muster_recent_events` is a catch-up path measured in
+ * minutes, not months.
+ */
+export async function pruneEvents(): Promise<number> {
+  const days = Number(process.env.EVENT_RETENTION_DAYS ?? 90);
+  if (!Number.isFinite(days) || days <= 0) return 0;   // 0 disables it
+  const rows = await query<{ id: string }>(
+    "DELETE FROM events WHERE created_at < now() - make_interval(days => $1) RETURNING id", [days]);
+  if (rows.length) console.log(`reconcile: pruned ${rows.length} events older than ${days} days`);
+  return rows.length;
+}
+
 export async function reconcileOnce(opts: { full?: boolean } = {}) {
+  await pruneEvents().catch(err => console.error("reconcile: prune failed", err?.message ?? err));
+
   const projects = await query<{ id: string; slug: string; github_repos: string[]; reconciled_at: string | null }>(
     "SELECT id, slug, github_repos, reconciled_at FROM projects WHERE cardinality(github_repos) > 0");
   if (!projects.length) return;
@@ -200,7 +251,7 @@ export async function reconcileOnce(opts: { full?: boolean } = {}) {
       }
 
       const tasks = await query<StoreTask>(
-        `SELECT id, title, body, status::text AS status, github_repo, github_issue_number
+        `SELECT id, title, body, status::text AS status, priority, github_repo, github_issue_number
          FROM tasks WHERE project_id = $1 AND github_issue_number IS NOT NULL`, [project.id]);
 
       const counts = await applyPlan(project.id, planReconcile(tasks, issues, full));
@@ -229,7 +280,9 @@ export function startReconcileLoop() {
   // protect: true skips a firing while the previous one is still running, so a
   // slow full scan cannot stack up behind itself.
   new Cron(expression, { timezone: "UTC", protect: true }, () => {
-    reconcileOnce().catch(e => console.error("reconcile error", e));
+    // Shares the lock with the admin route, so a scheduled pass and a button
+    // press cannot overlap either.
+    if (!startReconcile()) console.error("reconcile: skipped, a pass is already running");
   });
   console.log(`reconcile scheduled: ${expression} UTC`);
 }
