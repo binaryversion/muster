@@ -14,9 +14,8 @@
  * change made while the cycle was running is picked up next time instead of
  * being lost.
  */
-import { App } from "@octokit/app";
-import { readFileSync } from "node:fs";
 import { query } from "../db.js";
+import { makeApp, githubConfigured } from "../github/app.js";
 import { ensureBoardMetadata, optionIdFor, pushStatuses, resolveItemIds,
          type ProjectRow, type StatusUpdate } from "./projects.js";
 
@@ -35,13 +34,6 @@ interface DirtyTask {
   github_issue_number: number;
   github_node_id: string | null;
   github_item_id: string | null;
-}
-
-function makeApp() {
-  return new App({
-    appId: process.env.GITHUB_APP_ID!,
-    privateKey: readFileSync(process.env.GITHUB_APP_PRIVATE_KEY_PATH!, "utf8")
-  });
 }
 
 /** One installation octokit per repo, reused across the cycle. */
@@ -168,6 +160,11 @@ export async function syncOnce() {
 
 export function startSyncLoop() {
   if (process.env.GITHUB_SYNC_ENABLED !== "true") return;
+  if (!githubConfigured()) {
+    // Better to say so once at boot than to throw on every tick.
+    console.error("sync: GITHUB_SYNC_ENABLED is true but the GitHub App is not configured; mirror disabled");
+    return;
+  }
   const every = Number(process.env.GITHUB_SYNC_INTERVAL_SEC ?? 180) * 1000;
   setInterval(() => syncOnce().catch(e => console.error("sync error", e)), every);
 }

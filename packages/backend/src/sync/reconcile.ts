@@ -10,10 +10,9 @@
  * Planning is separated from applying so the diff rules are testable without
  * GitHub or a database: planReconcile() is pure.
  */
-import { App } from "@octokit/app";
 import { Cron } from "croner";
-import { readFileSync } from "node:fs";
 import { query, emit } from "../db.js";
+import { makeApp, githubConfigured } from "../github/app.js";
 
 export interface IssueSnapshot {
   repo: string;
@@ -171,13 +170,6 @@ export async function fetchIssues(octokit: Paginating, repo: string, since: stri
     }));
 }
 
-function makeApp() {
-  return new App({
-    appId: process.env.GITHUB_APP_ID!,
-    privateKey: readFileSync(process.env.GITHUB_APP_PRIVATE_KEY_PATH!, "utf8")
-  });
-}
-
 /**
  * One pass over every project. `full` forces a complete scan, which is the only
  * way orphans are noticed; the scheduled run is incremental after the first.
@@ -228,6 +220,10 @@ export async function reconcileOnce(opts: { full?: boolean } = {}) {
 
 export function startReconcileLoop() {
   if (process.env.GITHUB_RECONCILE_ENABLED !== "true") return;
+  if (!githubConfigured()) {
+    console.error("reconcile: GITHUB_RECONCILE_ENABLED is true but the GitHub App is not configured; reconcile disabled");
+    return;
+  }
   const expression = process.env.GITHUB_RECONCILE_CRON ?? "17 3 * * *";
   // Off-the-hour by default: every cron in the world fires at :00.
   // protect: true skips a firing while the previous one is still running, so a

@@ -1,30 +1,116 @@
+# Every setting comes from the environment. Compose reads .env in this directory
+# automatically, and a platform that injects environment variables (Coolify,
+# Dokploy, plain `docker compose` with an exported shell) overrides it.
+#
+#   cp .env.example .env    # then edit: at minimum POSTGRES_PASSWORD, ADMIN_PASSWORD
+#   docker compose up -d --build
+#
+# `${VAR:?message}` means "refuse to start without this", which is what you want
+# for a secret: the alternative is an instance quietly running on a default.
+
+name: ${COMPOSE_PROJECT_NAME:-muster}
+
+x-database-url: &database-url
+  DATABASE_URL: postgres://${POSTGRES_USER:-muster}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@db:5432/${POSTGRES_DB:-muster}
+
 services:
   db:
-    image: postgres:16
+    image: postgres:${POSTGRES_VERSION:-16}
+    restart: ${RESTART_POLICY:-unless-stopped}
     environment:
-      POSTGRES_USER: muster
-      POSTGRES_PASSWORD: muster
-      POSTGRES_DB: muster
-    ports: ["5432:5432"]
+      POSTGRES_USER: ${POSTGRES_USER:-muster}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-muster}
     volumes:
       - pgdata:/var/lib/postgresql/data
-      - ./packages/store/migrations:/docker-entrypoint-initdb.d:ro
+    ports:
+      # Bound to loopback by default: host tooling (psql, scripts/smoke.sh) can
+      # reach it, the internet cannot. Set DB_BIND=0.0.0.0 only if you mean it.
+      - "${DB_BIND:-127.0.0.1}:${DB_PORT:-5432}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-muster} -d $${POSTGRES_DB:-muster}"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+
+  # One-shot. Applies packages/store/migrations in order and exits; the two
+  # services wait for it to succeed, so a deploy that adds a migration is
+  # applied before any code that depends on it starts.
+  migrate:
+    image: postgres:${POSTGRES_VERSION:-16}
+    restart: "no"
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      <<: *database-url
+      MIGRATIONS_DIR: /migrations
+    volumes:
+      - ./packages/store/migrations:/migrations:ro
+      - ./scripts/migrate.sh:/usr/local/bin/migrate.sh:ro
+    entrypoint: ["bash", "/usr/local/bin/migrate.sh"]
 
   backend:
-    build: ./packages/backend
-    env_file: .env
+    build:
+      context: ./packages/backend
+    init: true
+    restart: ${RESTART_POLICY:-unless-stopped}
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     environment:
-      DATABASE_URL: postgres://muster:muster@db:5432/muster
-    ports: ["8080:8080"]
-    depends_on: [db]
+      <<: *database-url
+      BACKEND_PORT: ${BACKEND_PORT:-8080}
+      # Backoffice. Without this the admin API answers 503 rather than opening up.
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?set ADMIN_PASSWORD in .env}
+      ADMIN_SESSION_HOURS: ${ADMIN_SESSION_HOURS:-12}
+      ADMIN_LOGIN_ATTEMPTS: ${ADMIN_LOGIN_ATTEMPTS:-8}
+      TRUST_PROXY: ${TRUST_PROXY:-true}
+      # GitHub App. Optional: the store, the MCP tools and the backoffice all
+      # work without it; only the GitHub bridge needs it.
+      GITHUB_APP_ID: ${GITHUB_APP_ID:-}
+      GITHUB_APP_PRIVATE_KEY: ${GITHUB_APP_PRIVATE_KEY:-}
+      GITHUB_WEBHOOK_SECRET: ${GITHUB_WEBHOOK_SECRET:-}
+      GITHUB_SYNC_ENABLED: ${GITHUB_SYNC_ENABLED:-false}
+      GITHUB_SYNC_INTERVAL_SEC: ${GITHUB_SYNC_INTERVAL_SEC:-180}
+      GITHUB_SYNC_LABELS: ${GITHUB_SYNC_LABELS:-true}
+      GITHUB_SYNC_BATCH: ${GITHUB_SYNC_BATCH:-200}
+      GITHUB_RECONCILE_ENABLED: ${GITHUB_RECONCILE_ENABLED:-false}
+      GITHUB_RECONCILE_CRON: ${GITHUB_RECONCILE_CRON:-17 3 * * *}
+    ports:
+      - "${BACKEND_BIND:-0.0.0.0}:${BACKEND_PORT:-8080}:${BACKEND_PORT:-8080}"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:$${BACKEND_PORT:-8080}/healthz || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 15s
 
   mcp-server:
-    build: ./packages/mcp-server
-    env_file: .env
+    build:
+      context: ./packages/mcp-server
+    init: true
+    restart: ${RESTART_POLICY:-unless-stopped}
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     environment:
-      DATABASE_URL: postgres://muster:muster@db:5432/muster
-    ports: ["8090:8090"]
-    depends_on: [db]
+      <<: *database-url
+      MCP_PORT: ${MCP_PORT:-8090}
+      CLAIM_LEASE_SECONDS: ${CLAIM_LEASE_SECONDS:-1800}
+    ports:
+      - "${MCP_BIND:-0.0.0.0}:${MCP_PORT:-8090}:${MCP_PORT:-8090}"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:$${MCP_PORT:-8090}/healthz || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 15s
 
 volumes:
   pgdata:

@@ -39,7 +39,7 @@ jobs:
           --health-interval 5s --health-timeout 5s --health-retries 10
     env:
       DATABASE_URL: postgres://muster:muster@localhost:5432/muster
-      ADMIN_TOKEN: ci-admin-token
+      ADMIN_PASSWORD: ci-admin-password
       GITHUB_WEBHOOK_SECRET: ci-webhook-secret
       GITHUB_SYNC_ENABLED: 'false'
     steps:

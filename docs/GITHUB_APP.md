@@ -52,7 +52,7 @@ mutation($project:ID!, $field:ID!, $item0:ID!, $option0:String!, ...) {
 ### Wiring a project to a board
 
 ```bash
-curl -X PATCH localhost:8080/admin/projects/<id> -H "Authorization: Bearer $ADMIN_TOKEN" \
+curl -X PATCH localhost:8080/admin/projects/<id> -H "Authorization: Bearer $ADMIN_PASSWORD" \
   -H 'content-type: application/json' -d '{"github_owner":"acme","github_project_number":7}'
 ```
 
@@ -78,7 +78,7 @@ the aliases, and a name the board does not have is left alone rather than
 falling back to a guess:
 
 ```bash
-curl -X PATCH localhost:8080/admin/projects/<id> -H "Authorization: Bearer $ADMIN_TOKEN" \
+curl -X PATCH localhost:8080/admin/projects/<id> -H "Authorization: Bearer $ADMIN_PASSWORD" \
   -H 'content-type: application/json' \
   -d '{"github_status_map":{"ready":"Up next","in_progress":"WIP","review":"Awaiting review"}}'
 ```

@@ -11,7 +11,9 @@
 set -euo pipefail
 
 DATABASE_URL="${DATABASE_URL:-postgres://muster:muster@localhost:5432/muster}"
-MIGRATIONS="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/packages/store/migrations"
+# Overridable so the script can run from a container that mounts the migrations
+# somewhere other than next to the repo.
+MIGRATIONS="${MIGRATIONS_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/packages/store/migrations}"
 
 command -v psql >/dev/null || { echo "migrate: psql not found (apt install postgresql-client)" >&2; exit 1; }
 
