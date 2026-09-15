@@ -1,3 +1,4 @@
+-- applied-if: SELECT to_regclass('public.tasks') IS NOT NULL
 -- Muster store: coordination state for Claude Code lead sessions across machines.
 -- Humans plan in GitHub Projects; agents claim/complete here. This is the source
 -- of truth for claim, lease, status and findings. GitHub is the source of truth
@@ -5,7 +6,7 @@
 
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
-CREATE TABLE projects (
+CREATE TABLE IF NOT EXISTS projects (
   id            uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   slug          text UNIQUE NOT NULL,
   name          text NOT NULL,
@@ -17,7 +18,7 @@ CREATE TABLE projects (
 
 -- A "lead" is one Claude Code lead session identity (usually one developer's
 -- orchestrator). Tokens are hashed; the plaintext is shown once at issuance.
-CREATE TABLE leads (
+CREATE TABLE IF NOT EXISTS leads (
   id            uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   project_id    uuid NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
   name          text NOT NULL,           -- e.g. "alice-laptop"
@@ -29,10 +30,16 @@ CREATE TABLE leads (
   UNIQUE (project_id, name)
 );
 
-CREATE TYPE task_status AS ENUM ('backlog','ready','in_progress','review','done','cancelled');
-CREATE TYPE task_source AS ENUM ('human','agent');
+-- CREATE TYPE has no IF NOT EXISTS, and this file has to survive being re-run
+-- against a schema that arrived some other way.
+DO $$ BEGIN
+  CREATE TYPE task_status AS ENUM ('backlog','ready','in_progress','review','done','cancelled');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+  CREATE TYPE task_source AS ENUM ('human','agent');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
-CREATE TABLE tasks (
+CREATE TABLE IF NOT EXISTS tasks (
   id            uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   project_id    uuid NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
   title         text NOT NULL,
@@ -53,17 +60,17 @@ CREATE TABLE tasks (
   updated_at    timestamptz NOT NULL DEFAULT now(),
   UNIQUE (github_repo, github_issue_number)
 );
-CREATE INDEX tasks_available_idx ON tasks (project_id, priority, created_at)
+CREATE INDEX IF NOT EXISTS tasks_available_idx ON tasks (project_id, priority, created_at)
   WHERE status = 'ready' AND claimed_by IS NULL;
 
-CREATE TABLE task_deps (
+CREATE TABLE IF NOT EXISTS task_deps (
   task_id       uuid REFERENCES tasks(id) ON DELETE CASCADE,
   depends_on    uuid REFERENCES tasks(id) ON DELETE CASCADE,
   PRIMARY KEY (task_id, depends_on)
 );
 
 -- Shared discoveries so every agent does not rediscover the same gotcha.
-CREATE TABLE findings (
+CREATE TABLE IF NOT EXISTS findings (
   id            uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   project_id    uuid NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
   task_id       uuid REFERENCES tasks(id) ON DELETE SET NULL,
@@ -75,7 +82,7 @@ CREATE TABLE findings (
 
 -- Append-only event log. The channel server tails this to push events into
 -- running Claude Code sessions; the backoffice reads it for audit.
-CREATE TABLE events (
+CREATE TABLE IF NOT EXISTS events (
   id            bigserial PRIMARY KEY,
   project_id    uuid NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
   kind          text NOT NULL,           -- task.claimed, task.released, task.completed,
@@ -84,16 +91,17 @@ CREATE TABLE events (
   payload       jsonb NOT NULL DEFAULT '{}',
   created_at    timestamptz NOT NULL DEFAULT now()
 );
-CREATE INDEX events_project_id_idx ON events (project_id, id);
+CREATE INDEX IF NOT EXISTS events_project_id_idx ON events (project_id, id);
 
 -- Idempotency for GitHub webhook redelivery.
-CREATE TABLE webhook_deliveries (
+CREATE TABLE IF NOT EXISTS webhook_deliveries (
   delivery_id   text PRIMARY KEY,
   received_at   timestamptz NOT NULL DEFAULT now()
 );
 
 CREATE OR REPLACE FUNCTION touch_updated_at() RETURNS trigger AS $$
 BEGIN NEW.updated_at = now(); RETURN NEW; END $$ LANGUAGE plpgsql;
+DROP TRIGGER IF EXISTS tasks_touch ON tasks;
 CREATE TRIGGER tasks_touch BEFORE UPDATE ON tasks
   FOR EACH ROW EXECUTE FUNCTION touch_updated_at();
 

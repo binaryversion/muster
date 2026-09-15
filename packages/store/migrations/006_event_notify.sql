@@ -1,3 +1,4 @@
+-- applied-if: SELECT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname='events_notify')
 -- Tell listeners when an event lands, instead of making them ask.
 --
 -- Every open /events/stream connection ran its own 2-second poll. At a handful
@@ -18,5 +19,6 @@ BEGIN
   RETURN NULL;
 END $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS events_notify ON events;
 CREATE TRIGGER events_notify AFTER INSERT ON events
   FOR EACH ROW EXECUTE FUNCTION notify_event();

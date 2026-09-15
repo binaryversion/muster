@@ -1,3 +1,4 @@
+-- applied-if: SELECT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='findings' AND column_name='search')
 -- Full-text search over findings.
 --
 -- muster_search_findings matched with `content ILIKE '%…%'`, which no index can
@@ -14,7 +15,7 @@ CREATE OR REPLACE FUNCTION muster_tags_text(text[]) RETURNS text
   LANGUAGE sql IMMUTABLE STRICT PARALLEL SAFE
   AS $$ SELECT array_to_string($1, ' ') $$;
 
-ALTER TABLE findings ADD COLUMN search tsvector
+ALTER TABLE findings ADD COLUMN IF NOT EXISTS search tsvector
   GENERATED ALWAYS AS (
     -- Tags outrank the body: someone who tagged a finding `flaky` said what it
     -- is about more deliberately than the prose did.
@@ -22,13 +23,13 @@ ALTER TABLE findings ADD COLUMN search tsvector
     setweight(to_tsvector('english'::regconfig, content), 'B')
   ) STORED;
 
-CREATE INDEX findings_search_idx ON findings USING GIN (search);
+CREATE INDEX IF NOT EXISTS findings_search_idx ON findings USING GIN (search);
 
 -- The ILIKE fallback still runs for short or symbol-heavy queries, where full
 -- text does badly: `ENOSPC`, `--no-sandbox`, `5432`. Give it a trigram index
 -- rather than leaving one query shape on a sequential scan.
 CREATE EXTENSION IF NOT EXISTS pg_trgm;
-CREATE INDEX findings_content_trgm_idx ON findings USING GIN (content gin_trgm_ops);
+CREATE INDEX IF NOT EXISTS findings_content_trgm_idx ON findings USING GIN (content gin_trgm_ops);
 
 COMMENT ON COLUMN findings.search IS
   'Generated: tags weighted A, content weighted B. Queried with websearch_to_tsquery.';
