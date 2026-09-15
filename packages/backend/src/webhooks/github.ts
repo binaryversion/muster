@@ -60,13 +60,17 @@ webhooks.on("check_suite.completed", async ({ payload }) => {
 
 // Projects v2 item edited by a human (e.g. moved between columns). The field
 // value needs a GraphQL lookup; we record the event and let reconcile pull it.
-webhooks.on("projects_v2_item.edited" as any, async ({ payload }: any) => {
-  const nodeId = payload.projects_v2_item?.content_node_id;
-  if (!nodeId) return;
+// The item id itself is right here though, and it is what status write-back
+// needs, so cache it rather than paying for a lookup later.
+webhooks.on(["projects_v2_item.edited", "projects_v2_item.created"] as any, async ({ payload }: any) => {
+  const contentId = payload.projects_v2_item?.content_node_id;
+  const itemId = payload.projects_v2_item?.node_id;
+  if (!contentId) return;
   const rows = await query<{ project_id: string; id: string }>(
-    "SELECT project_id, id FROM tasks WHERE github_node_id = $1", [nodeId]);
+    `UPDATE tasks SET github_item_id = COALESCE($2, github_item_id)
+     WHERE github_node_id = $1 RETURNING project_id, id`, [contentId, itemId ?? null]);
   if (rows[0]) await emit(rows[0].project_id, "github.item.edited", "github",
-    { task_id: rows[0].id, item_id: payload.projects_v2_item.node_id });
+    { task_id: rows[0].id, item_id: itemId });
 });
 
 export const githubWebhookRouter = Router();

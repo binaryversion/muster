@@ -14,3 +14,49 @@ jobs:
         working-directory: packages/${{ matrix.pkg }}
       - run: npm run build
         working-directory: packages/${{ matrix.pkg }}
+      - name: unit tests
+        working-directory: packages/${{ matrix.pkg }}
+        # Only the backend defines tests so far; skip quietly elsewhere.
+        run: |
+          if node -e "process.exit(require('./package.json').scripts?.test ? 0 : 1)"; then
+            npm test
+          else
+            echo "no test script for ${{ matrix.pkg }}"
+          fi
+
+  smoke:
+    runs-on: ubuntu-latest
+    services:
+      db:
+        image: postgres:16
+        env:
+          POSTGRES_USER: muster
+          POSTGRES_PASSWORD: muster
+          POSTGRES_DB: muster
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U muster"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      DATABASE_URL: postgres://muster:muster@localhost:5432/muster
+      ADMIN_TOKEN: ci-admin-token
+      GITHUB_WEBHOOK_SECRET: ci-webhook-secret
+      GITHUB_SYNC_ENABLED: 'false'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - run: ./scripts/migrate.sh
+      - name: build and start the stack
+        run: |
+          for pkg in backend mcp-server; do
+            (cd "packages/$pkg" && npm ci && npm run build)
+          done
+          (cd packages/backend    && node dist/index.js &)
+          (cd packages/mcp-server && node dist/index.js &)
+          for _ in $(seq 1 30); do
+            curl -sf localhost:8080/healthz >/dev/null && curl -sf localhost:8090/healthz >/dev/null && exit 0
+            sleep 1
+          done
+          echo "servers did not come up" >&2; exit 1
+      - run: ./scripts/smoke.sh
