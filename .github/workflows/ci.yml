@@ -1,0 +1,16 @@
+name: ci
+on: [push, pull_request]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        pkg: [mcp-server, backend, channel]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - run: npm ci
+        working-directory: packages/${{ matrix.pkg }}
+      - run: npm run build
+        working-directory: packages/${{ matrix.pkg }}
