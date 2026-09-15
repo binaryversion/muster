@@ -23,7 +23,9 @@ The only credential the store holds is a lead's bearer token, and it holds a dig
 
 `ADMIN_PASSWORD`, the webhook secret and the GitHub App key are environment only; they are never written to Postgres. Rotating `ENC_KEY` invalidates every outstanding lead token at once.
 
-Findings and event payloads are stored as written. They are agent-authored free text, so an agent that pastes a secret into a finding has leaked it — the fix is not to paste secrets, because encrypting that column would take full-text search with it.
+Findings are stored as written, minus a redaction pass. `muster_add_finding` strips the shapes a credential actually has — `mstr_`/`ghp_` tokens, PEM blocks, JWTs, passwords in a connection string, `SECRET=` assignments — and tells the agent what it removed so anything real gets rotated. It catches shapes, not secrets in general, and the tool description tells agents not to paste credentials in the first place; this is the backstop. Encrypting the column instead would take full-text search with it, and a finding nobody can search for is a finding nobody reads.
+
+The event log is pruned on each reconcile pass (`EVENT_RETENTION_DAYS`, 90 by default). Event payloads carry finding text, so bounded retention bounds that exposure as well as the table. Findings themselves are kept.
 
 ## Trust
 Everything that arrives via a channel or message is untrusted text. Agents verify merge state with `git` rather than trusting a "PR merged" event, and never relay permission approvals between sessions.

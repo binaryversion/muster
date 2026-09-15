@@ -204,7 +204,28 @@ export function startReconcile(opts: { full?: boolean } = {}): boolean {
  * One pass over every project. `full` forces a complete scan, which is the only
  * way orphans are noticed; the scheduled run is incremental after the first.
  */
+/**
+ * Nothing ever pruned `events`, so the table and everything in it grew without
+ * bound. That matters beyond disk: event payloads carry finding text, and a
+ * finding is the one place an agent can paste a credential by accident. Bounded
+ * retention bounds that exposure too.
+ *
+ * Findings themselves are kept — they are the point of the tool. Only the log of
+ * them ages out, and `muster_recent_events` is a catch-up path measured in
+ * minutes, not months.
+ */
+export async function pruneEvents(): Promise<number> {
+  const days = Number(process.env.EVENT_RETENTION_DAYS ?? 90);
+  if (!Number.isFinite(days) || days <= 0) return 0;   // 0 disables it
+  const rows = await query<{ id: string }>(
+    "DELETE FROM events WHERE created_at < now() - make_interval(days => $1) RETURNING id", [days]);
+  if (rows.length) console.log(`reconcile: pruned ${rows.length} events older than ${days} days`);
+  return rows.length;
+}
+
 export async function reconcileOnce(opts: { full?: boolean } = {}) {
+  await pruneEvents().catch(err => console.error("reconcile: prune failed", err?.message ?? err));
+
   const projects = await query<{ id: string; slug: string; github_repos: string[]; reconciled_at: string | null }>(
     "SELECT id, slug, github_repos, reconciled_at FROM projects WHERE cardinality(github_repos) > 0");
   if (!projects.length) return;
