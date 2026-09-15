@@ -34,28 +34,28 @@ const wrap = (fn: (req: Request, res: Response) => Promise<unknown>) =>
   (req: Request, res: Response, next: NextFunction) => { fn(req, res).catch(next); };
 
 // Logging in is the one thing you can reach without already being in.
-adminRouter.post("/admin/login", (req, res) => {
+adminRouter.post("/admin/login", wrap(async (req, res) => {
   const secret = adminSecret();
   if (!secret) return res.status(503).json({ error: "ADMIN_PASSWORD is not set on the backend" });
-  if (lockedOut(req)) {
-    return res.status(429).json({ error: `too many attempts, wait ${loginThrottle(req)}s` });
+  if (await lockedOut(req)) {
+    return res.status(429).json({ error: `too many attempts, wait ${await loginThrottle(req)}s` });
   }
   const password = typeof req.body?.password === "string" ? req.body.password : "";
   if (!password || password.length > 512 || !sameSecret(password, secret)) {
-    noteLoginFailure(req);
+    await noteLoginFailure(req);
     // One message for a wrong password and for no password: nothing here should
     // help someone work out how close they are.
     return res.status(401).json({ error: "wrong password" });
   }
-  noteLoginSuccess(req);
-  setSessionCookie(req, res);
+  await noteLoginSuccess(req);
+  await setSessionCookie(req, res);
   res.json({ ok: true });
-});
+}));
 
-adminRouter.post("/admin/logout", (req, res) => {
-  clearSessionCookie(req, res);
+adminRouter.post("/admin/logout", wrap(async (req, res) => {
+  await clearSessionCookie(req, res);
   res.json({ ok: true });
-});
+}));
 
 adminRouter.use("/admin", requireAdmin);
 

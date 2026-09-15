@@ -116,6 +116,17 @@ Two things to check on your platform:
    start without App credentials and say so once in the log rather than failing
    on every tick.
 
+## Running more than one backend
+
+Sessions and login throttling live in Postgres, so a second replica works:
+sign in against one and the cookie is valid on all of them, sign out and it dies
+everywhere, and a client's failed logins are counted once rather than once per
+process.
+
+The GitHub mirror and the reconcile are the exception — both assume a single
+writer. Run them on one instance (`GITHUB_SYNC_ENABLED` / `GITHUB_RECONCILE_ENABLED`
+true there, false elsewhere) and the rest can scale freely.
+
 ## Upgrading
 
 ```bash
