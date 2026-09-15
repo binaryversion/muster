@@ -6,10 +6,10 @@
 import { Router } from "express";
 import { query } from "../db.js";
 import { candidateDigests } from "../crypto.js";
+import { subscribe, FALLBACK_POLL_MS } from "./bus.js";
 
 export const eventsRouter = Router();
 
-const POLL_MS = 2000;
 const KEEPALIVE_MS = 25_000;
 
 async function resolveSince(projectId: string, req: { header(n: string): string | undefined; query: any }) {
@@ -68,10 +68,20 @@ eventsRouter.get("/events/stream", async (req, res) => {
   };
 
   await tick();
-  const poll = setInterval(() => tick().catch(err => console.error("sse poll error", err)), POLL_MS);
+
+  // Pushed: one LISTEN connection for the process wakes this stream when an
+  // event lands for its project.
+  const unsubscribe = subscribe(lead.project_id,
+    () => { tick().catch(err => console.error("sse push error", err)); });
+
+  // And still polled, slowly. A notification can be missed — the LISTEN
+  // connection can drop, and pg_notify is not delivered to a client that is not
+  // connected at that moment — so this is the floor that guarantees delivery
+  // rather than the mechanism that provides it.
+  const poll = setInterval(() => tick().catch(err => console.error("sse poll error", err)), FALLBACK_POLL_MS);
   // Comment frames keep idle proxies from tearing the connection down.
   const keepalive = setInterval(() => res.write(": keepalive\n\n"), KEEPALIVE_MS);
-  const stop = () => { clearInterval(poll); clearInterval(keepalive); };
+  const stop = () => { unsubscribe(); clearInterval(poll); clearInterval(keepalive); };
   req.on("close", stop);
   res.on("close", stop);
 });

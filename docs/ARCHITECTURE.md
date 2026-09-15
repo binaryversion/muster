@@ -18,6 +18,10 @@ Each store task carries `github_repo` + `github_issue_number` (unique) and the i
 ## Events
 Append-only `events` table. Producers: MCP tools (claims, releases, completes, findings), webhooks (pr.merged, ci.failed, task.done). Consumers: SSE stream → channel plugin → running Claude Code sessions; backoffice; `muster_recent_events` for sessions that missed pushes.
 
+An insert fires a trigger that `pg_notify`s the project id on one channel, and the backend holds a single `LISTEN` connection for the whole process which fans out to the open streams. Load therefore scales with how much is happening rather than with how many leads are watching, which is the right way round — the previous per-connection poll meant thirty watchers cost thirty queries every two seconds whether or not anything had changed.
+
+The notification carries only the project id, never the event. A woken stream still reads forward from the last id it sent, so a missed notification, a dropped `LISTEN` connection or a reconnect with `Last-Event-ID` all converge on the same answer. A slow fallback poll (`EVENT_POLL_MS`) remains underneath as the delivery guarantee: `pg_notify` reaches nobody who was not connected at that moment, so push is the mechanism and the poll is the floor.
+
 ## Credentials at rest
 The only credential the store holds is a lead's bearer token, and it holds a digest of it, never the token. The digest is HMAC-SHA256 under `ENC_KEY`, not encryption: something you can decrypt is something an attacker with the database and the key can replay, whereas a keyed digest cannot be reversed at all and still verifies in one indexed equality. The property that buys is that the database alone is inert — a dump, a backup or a read-only replica gives an attacker nothing to test guesses against.
 

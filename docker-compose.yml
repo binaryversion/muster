@@ -71,6 +71,7 @@ services:
       ADMIN_SESSION_HOURS: ${ADMIN_SESSION_HOURS:-12}
       ADMIN_LOGIN_ATTEMPTS: ${ADMIN_LOGIN_ATTEMPTS:-8}
       TRUST_PROXY: ${TRUST_PROXY:-true}
+      EVENT_POLL_MS: ${EVENT_POLL_MS:-15000}
       # GitHub App. Optional: the store, the MCP tools and the backoffice all
       # work without it; only the GitHub bridge needs it.
       GITHUB_APP_ID: ${GITHUB_APP_ID:-}
