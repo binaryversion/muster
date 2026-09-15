@@ -26,26 +26,24 @@ All six tasks from the original handoff are done.
 - Channel plugin verified against the Claude Code channel contract; see
   `packages/channel/README.md` for what that contract actually requires.
 - `docs/CLAUDE_MD_SNIPPET.md` is the protocol leads paste into their projects.
+- Backoffice sign-in with `ADMIN_PASSWORD`; lead-token digests keyed by `ENC_KEY`.
+- Deployed with `docker compose`, every setting read from `.env`.
 
-## Not done, roughly in order of how much it matters
+## Not done
 
-1. **Nothing writes `priority`.** GitHub owns it per the tie-break table, but no
-   field is mapped to it, so every task sits at the default 3 and
-   `list_available_tasks` orders by creation time in practice. Pick a source (a
-   `P1`/`P2` label, or a Projects v2 number field) and read it in the webhook
-   handler and the reconcile.
-2. **No rate-limit backoff.** The mirror and the reconcile will happily keep
-   calling a GitHub that is returning 403 secondary-rate-limit. Honour
-   `retry-after` / `x-ratelimit-reset` per installation.
-3. **`search_findings` is `ILIKE`.** Fine for a few hundred findings, not for a
-   year of them. A `tsvector` column with a GIN index is the obvious fix.
-4. **Task dependencies have no way in.** `task_deps` and the claim-time check
-   exist and work, but nothing populates the table — no webhook, no tool, no
-   admin route. Parse "depends on #12" from the issue body, or add an admin
-   endpoint.
-5. **The SSE stream polls every 2s per connected lead.** Fine at a handful of
-   leads; `LISTEN/NOTIFY` is the fix when it is not.
-6. **`docker-compose.yml` still mounts migrations into
-   `docker-entrypoint-initdb.d`,** which only runs on a fresh volume. It is
-   harmless alongside `scripts/migrate.sh` (which detects and backfills that
-   case), but it is a trap worth removing.
+Tracked as GitHub issues; [#1](https://github.com/binaryversion/muster/issues/1)
+is the index. In rough order of how much they matter:
+
+| # | What |
+|---|---|
+| [#19](https://github.com/binaryversion/muster/issues/19) | The container build has never been run end to end |
+| [#13](https://github.com/binaryversion/muster/issues/13) | Nothing writes task `priority` |
+| [#14](https://github.com/binaryversion/muster/issues/14) | No rate-limit backoff on GitHub calls |
+| [#15](https://github.com/binaryversion/muster/issues/15) | `muster_search_findings` is `ILIKE`, not full text |
+| [#16](https://github.com/binaryversion/muster/issues/16) | Nothing populates `task_deps` |
+| [#17](https://github.com/binaryversion/muster/issues/17) | `POST /admin/reconcile` runs synchronously |
+| [#18](https://github.com/binaryversion/muster/issues/18) | The SSE stream polls Postgres once per connected lead |
+| [#20](https://github.com/binaryversion/muster/issues/20) | Backoffice sessions are in-memory |
+| [#21](https://github.com/binaryversion/muster/issues/21) | `crypto.ts` is duplicated across two packages |
+| [#22](https://github.com/binaryversion/muster/issues/22) | Remove the `docker-entrypoint-initdb.d` migrations mount |
+| [#23](https://github.com/binaryversion/muster/issues/23) | Findings and event payloads are stored as written |

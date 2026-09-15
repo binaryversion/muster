@@ -192,9 +192,15 @@ plugin (verified against the Claude Code channel contract), label and Projects
 v2 Status mirroring, and the nightly reconcile are all in place and covered by
 tests.
 
-Known gaps are listed in [`HANDOFF.md`](HANDOFF.md) — the notable ones are that
-nothing writes `priority` yet, findings search is `ILIKE` rather than real full
-text, and there is no per-installation backoff when GitHub rate-limits.
+Known gaps are tracked as
+[open issues](https://github.com/binaryversion/muster/issues) — the notable ones
+are that the container images have not yet been built end to end
+([#19](https://github.com/binaryversion/muster/issues/19)), nothing writes
+`priority` ([#13](https://github.com/binaryversion/muster/issues/13)), findings
+search is `ILIKE` rather than real full text
+([#15](https://github.com/binaryversion/muster/issues/15)), and there is no
+backoff when GitHub rate-limits
+([#14](https://github.com/binaryversion/muster/issues/14)).
 
 ## License
 
