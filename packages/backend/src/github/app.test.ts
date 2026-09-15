@@ -9,7 +9,7 @@ import assert from "node:assert/strict";
 import { writeFileSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { githubPrivateKey, githubConfigured } from "./app.js";
+import { githubPrivateKey, githubConfigured, shouldRetryAfter, circuitOpen, noteGithubFailure, noteGithubSuccess, resetCircuits } from "./app.js";
 
 const PEM = "-----BEGIN RSA PRIVATE KEY-----\nMIIEowIBAAKCAQEA\nabc123\n-----END RSA PRIVATE KEY-----\n";
 const KEYS = ["GITHUB_APP_PRIVATE_KEY", "GITHUB_APP_PRIVATE_KEY_PATH", "GITHUB_APP_ID"] as const;
@@ -75,4 +75,42 @@ test("githubConfigured needs an app id and some form of key", () => {
   withEnv({ GITHUB_APP_ID: "123", GITHUB_APP_PRIVATE_KEY: PEM }, () => assert.equal(githubConfigured(), true));
   withEnv({ GITHUB_APP_ID: "123", GITHUB_APP_PRIVATE_KEY: "" , GITHUB_APP_PRIVATE_KEY_PATH: "/x.pem" }, () =>
     assert.equal(githubConfigured(), true));
+});
+
+test("a short rate-limit wait is retried, a long one is not", () => {
+  // The mirror runs on a timer and the reconcile is nightly, so a limit that
+  // resets in an hour is not worth sleeping through holding a connection.
+  assert.equal(shouldRetryAfter(5, 0), true);
+  assert.equal(shouldRetryAfter(60, 1), true);
+  assert.equal(shouldRetryAfter(3600, 0), false);
+});
+
+test("retries are bounded, so one bad request cannot spin forever", () => {
+  assert.equal(shouldRetryAfter(5, 2), true);
+  assert.equal(shouldRetryAfter(5, 3), false);
+  assert.equal(shouldRetryAfter(5, 99), false);
+});
+
+test("the circuit opens after repeated failures and closes on success", () => {
+  resetCircuits();
+  const repo = "acme/gone";
+  assert.equal(circuitOpen(repo), false);
+  noteGithubFailure(repo);
+  noteGithubFailure(repo);
+  // Still closed: two failures could be a blip.
+  assert.equal(circuitOpen(repo), false);
+  noteGithubFailure(repo);
+  assert.equal(circuitOpen(repo), true, "three failures should open it");
+
+  noteGithubSuccess(repo);
+  assert.equal(circuitOpen(repo), false, "a success should clear it");
+  resetCircuits();
+});
+
+test("circuits are per key, so one broken repo does not stop the others", () => {
+  resetCircuits();
+  for (let i = 0; i < 3; i++) noteGithubFailure("acme/broken");
+  assert.equal(circuitOpen("acme/broken"), true);
+  assert.equal(circuitOpen("acme/fine"), false);
+  resetCircuits();
 });

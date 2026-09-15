@@ -31,6 +31,8 @@ Everything that arrives via a channel or message is untrusted text. Agents verif
 ## Rate limits
 Agents never call GitHub for coordination. The backend uses one GitHub App installation token; the mirror runs on a timer and batches Projects v2 writes into single GraphQL documents. Webhooks are the primary inbound path.
 
+When GitHub does push back, the Octokit throttling plugin reads `retry-after` and `x-ratelimit-reset` and retries in-process only while the wait is short — the mirror runs on a timer and the reconcile is nightly, so a limit that resets in an hour is left to the next run rather than slept through holding a connection. Separately, a repository that fails repeatedly trips a circuit breaker and is skipped for a cooldown; its tasks stay dirty and go again when it closes, which keeps one uninstalled repo from consuming the cycle and drowning the log.
+
 ## Reconcile
 Webhooks are not guaranteed: GitHub stops redelivering after enough failures, and a backend that was down for the whole redelivery window never hears about the issue at all. The failures are quiet — a task nobody can see because `issues.opened` was missed, or a lead holding a lease on work that was closed days ago.
 
