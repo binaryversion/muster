@@ -13,7 +13,7 @@
 #   (cd packages/mcp-server && npm i && npm run dev)
 #
 # Usage:
-#   ADMIN_TOKEN=... GITHUB_WEBHOOK_SECRET=... ./scripts/smoke.sh
+#   ADMIN_PASSWORD=... GITHUB_WEBHOOK_SECRET=... ./scripts/smoke.sh
 #
 # Env (all optional except the two secrets, which must match the servers'):
 #   BACKEND_URL   default http://localhost:8080
@@ -23,13 +23,14 @@ set -euo pipefail
 
 BACKEND_URL="${BACKEND_URL:-http://localhost:8080}"
 MCP_URL="${MCP_URL:-http://localhost:8090/mcp}"
-ADMIN_TOKEN="${ADMIN_TOKEN:-}"
+# ADMIN_TOKEN is the old name for the same secret; still accepted.
+ADMIN_PASSWORD="${ADMIN_PASSWORD:-${ADMIN_TOKEN:-}}"
 GITHUB_WEBHOOK_SECRET="${GITHUB_WEBHOOK_SECRET:-}"
 
 for bin in curl jq openssl; do
   command -v "$bin" >/dev/null || { echo "smoke: $bin is required" >&2; exit 1; }
 done
-[ -n "$ADMIN_TOKEN" ] || { echo "smoke: ADMIN_TOKEN must be set (same value as the backend's)" >&2; exit 1; }
+[ -n "$ADMIN_PASSWORD" ] || { echo "smoke: ADMIN_PASSWORD must be set (same value as the backend's)" >&2; exit 1; }
 [ -n "$GITHUB_WEBHOOK_SECRET" ] || { echo "smoke: GITHUB_WEBHOOK_SECRET must be set (same value as the backend's)" >&2; exit 1; }
 
 RUN="$(date +%s)-$$"
@@ -60,9 +61,9 @@ admin() { # admin METHOD PATH [BODY]
   local method="$1" path="$2" body="${3:-}"
   if [ -n "$body" ]; then
     curl -sS -X "$method" "$BACKEND_URL$path" \
-      -H "Authorization: Bearer $ADMIN_TOKEN" -H 'content-type: application/json' -d "$body"
+      -H "Authorization: Bearer $ADMIN_PASSWORD" -H 'content-type: application/json' -d "$body"
   else
-    curl -sS -X "$method" "$BACKEND_URL$path" -H "Authorization: Bearer $ADMIN_TOKEN"
+    curl -sS -X "$method" "$BACKEND_URL$path" -H "Authorization: Bearer $ADMIN_PASSWORD"
   fi
 }
 
@@ -106,8 +107,11 @@ TOKEN_B=$(issue_lead "smoke-lead-b"); [ -n "$TOKEN_B" ] || die "no token issued 
 pass "issued two lead tokens (shown once, stored hashed)"
 
 [ "$(curl -sS -o /dev/null -w '%{http_code}' -X POST "$BACKEND_URL/admin/projects" \
-     -H 'Authorization: Bearer definitely-not-the-admin-token')" = "401" ] \
-  && pass "admin API rejects a bad admin token" || fail "admin API accepted a bad admin token"
+     -H 'Authorization: Bearer definitely-not-the-admin-password')" = "401" ] \
+  && pass "admin API rejects a bad admin password" || fail "admin API accepted a bad admin password"
+
+[ "$(curl -sS -o /dev/null -w '%{http_code}' "$BACKEND_URL/admin/projects")" = "401" ] \
+  && pass "admin API refuses anonymous callers" || fail "admin API served an anonymous caller"
 
 [ "$(curl -sS -o /dev/null -w '%{http_code}' -X POST "$MCP_URL" \
      -H 'Authorization: Bearer mstr_not-a-real-token' -H 'content-type: application/json' \
@@ -253,7 +257,40 @@ last_id=$( { curl -sS --max-time 4 -N "$BACKEND_URL/events/stream?since=0" \
   && pass "SSE Last-Event-ID resumes instead of replaying" \
   || fail "SSE ignored Last-Event-ID"
 
-step "7. revocation"
+step "7. backoffice login"
+jar="$(mktemp)"
+trap 'rm -f "$jar"' RETURN 2>/dev/null || true
+
+[ "$(curl -sS -o /dev/null -w '%{http_code}' -X POST "$BACKEND_URL/admin/login" \
+     -H 'content-type: application/json' -d '{"password":"not-the-password"}')" = "401" ] \
+  && pass "login rejects a wrong password" || fail "login accepted a wrong password"
+
+[ "$(curl -sS -o /dev/null -w '%{http_code}' -X POST "$BACKEND_URL/admin/login" -c "$jar" \
+     -H 'content-type: application/json' \
+     -d "$(jq -nc --arg p "$ADMIN_PASSWORD" '{password:$p}')")" = "200" ] \
+  && pass "login accepts the admin password" || fail "login rejected the admin password"
+
+session=$(grep muster_admin "$jar" 2>/dev/null | awk '{print $7}')
+[ -n "$session" ] && pass "login sets a session cookie" || fail "login set no session cookie"
+grep -q '^#HttpOnly_' "$jar" 2>/dev/null \
+  && pass "session cookie is HttpOnly" || fail "session cookie is readable from JS"
+
+[ "$(curl -sS -o /dev/null -w '%{http_code}' "$BACKEND_URL/admin/session" -b "$jar")" = "200" ] \
+  && pass "the session cookie authenticates" || fail "the session cookie did not authenticate"
+
+[ "$(curl -sS -o /dev/null -w '%{http_code}' "$BACKEND_URL/admin/session" \
+     -H 'Cookie: muster_admin=made-up-session-id')" = "401" ] \
+  && pass "a made-up session id is rejected" || fail "a made-up session id was accepted"
+
+curl -sS -o /dev/null -X POST "$BACKEND_URL/admin/logout" -H "Cookie: muster_admin=$session"
+[ "$(curl -sS -o /dev/null -w '%{http_code}' "$BACKEND_URL/admin/session" \
+     -H "Cookie: muster_admin=$session")" = "401" ] \
+  && pass "signing out revokes the session server-side" || fail "the session survived sign out"
+
+[ "$(curl -sS -o /dev/null -w '%{http_code}' "$BACKEND_URL/ui/")" = "200" ] \
+  && pass "the backoffice page is served" || fail "the backoffice page is missing"
+
+step "8. revocation"
 lead_a_id=$(admin GET "/admin/projects/$PROJECT_ID/leads" | jq -r '.[] | select(.name == "smoke-lead-a") | .id')
 admin DELETE "/admin/leads/$lead_a_id" >/dev/null
 [ "$(curl -sS -o /dev/null -w '%{http_code}' -X POST "$MCP_URL" \

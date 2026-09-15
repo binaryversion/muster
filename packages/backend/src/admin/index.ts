@@ -1,5 +1,9 @@
 /**
- * Backoffice API. Protected by ADMIN_TOKEN. Put a tiny UI (or curl) in front.
+ * Backoffice API. Everything under /admin needs ADMIN_PASSWORD, as a bearer
+ * token or a session cookie from /admin/login. See admin/auth.ts.
+ *   POST   /admin/login                {password} -> session cookie
+ *   POST   /admin/logout               clear it
+ *   GET    /admin/session              is this browser logged in?
  *   POST   /admin/projects             {slug,name,github_owner?,github_repos[],github_project_number?}
  *   GET    /admin/projects
  *   PATCH  /admin/projects/:id         edit repos / board wiring / status map
@@ -14,14 +18,12 @@ import { randomBytes, createHash } from "node:crypto";
 import { z } from "zod";
 import { query } from "../db.js";
 import { reconcileOnce } from "../sync/reconcile.js";
+import {
+  adminSecret, requireAdmin, setSessionCookie, clearSessionCookie,
+  loginThrottle, noteLoginFailure, noteLoginSuccess, lockedOut, sameSecret
+} from "./auth.js";
 
 export const adminRouter = Router();
-
-adminRouter.use("/admin", (req, res, next) => {
-  const t = req.header("authorization")?.replace(/^Bearer\s+/i, "");
-  if (!process.env.ADMIN_TOKEN || t !== process.env.ADMIN_TOKEN) return res.status(401).end();
-  next();
-});
 
 /**
  * Express 4 does not catch a rejected promise from an async handler, so an
@@ -29,6 +31,35 @@ adminRouter.use("/admin", (req, res, next) => {
  */
 const wrap = (fn: (req: Request, res: Response) => Promise<unknown>) =>
   (req: Request, res: Response, next: NextFunction) => { fn(req, res).catch(next); };
+
+// Logging in is the one thing you can reach without already being in.
+adminRouter.post("/admin/login", (req, res) => {
+  const secret = adminSecret();
+  if (!secret) return res.status(503).json({ error: "ADMIN_PASSWORD is not set on the backend" });
+  if (lockedOut(req)) {
+    return res.status(429).json({ error: `too many attempts, wait ${loginThrottle(req)}s` });
+  }
+  const password = typeof req.body?.password === "string" ? req.body.password : "";
+  if (!password || password.length > 512 || !sameSecret(password, secret)) {
+    noteLoginFailure(req);
+    // One message for a wrong password and for no password: nothing here should
+    // help someone work out how close they are.
+    return res.status(401).json({ error: "wrong password" });
+  }
+  noteLoginSuccess(req);
+  setSessionCookie(req, res);
+  res.json({ ok: true });
+});
+
+adminRouter.post("/admin/logout", (req, res) => {
+  clearSessionCookie(req, res);
+  res.json({ ok: true });
+});
+
+adminRouter.use("/admin", requireAdmin);
+
+// Lets the UI show the board instead of the login form on a reload.
+adminRouter.get("/admin/session", (_req, res) => res.json({ ok: true }));
 
 const ProjectIn = z.object({
   slug: z.string().regex(/^[a-z0-9-]+$/),

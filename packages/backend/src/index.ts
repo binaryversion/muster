@@ -8,6 +8,10 @@ import { startSyncLoop } from "./sync/github.js";
 import { startReconcileLoop } from "./sync/reconcile.js";
 
 const app = express();
+// Behind Coolify, Traefik, nginx or any other proxy the hop into the container
+// is plain http from a container IP; trust the forwarded headers so client IPs
+// and the https flag on the session cookie are right.
+if (process.env.TRUST_PROXY !== "false") app.set("trust proxy", true);
 // Keep the raw body for webhook signature verification.
 app.use(express.json({ limit: "2mb", verify: (req: any, _res, buf) => { req.rawBody = buf.toString("utf8"); } }));
 

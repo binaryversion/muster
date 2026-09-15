@@ -93,16 +93,29 @@
   }
   #token-out.show { display: block; }
   code { font-family: var(--mono); font-size: 12px; word-break: break-all; }
+
+  /* Login gate. The page is public; nothing in it works without the password. */
+  #gate {
+    position: fixed; inset: 0; z-index: 10; background: var(--bg);
+    display: none; align-items: center; justify-content: center; padding: 20px;
+  }
+  body.locked #gate { display: flex; }
+  body.locked > header, body.locked > main { display: none; }
+  #login {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
+    padding: 26px; width: 100%; max-width: 360px; display: grid; gap: 14px;
+  }
+  #login h2 { margin: 0; font-size: 17px; }
+  #login p { margin: 0; font-size: 12px; }
+  #login button { padding: 9px 12px; }
+  #login-error:empty { display: none; }
+  #login-error { color: var(--bad); }
 </style>
 </head>
-<body>
+<body class="locked">
 
 <header>
   <h1>Muster <small>backoffice</small></h1>
-  <label style="flex:0 1 320px">
-    admin token
-    <input id="token" type="password" placeholder="ADMIN_TOKEN" autocomplete="off">
-  </label>
   <label style="flex:0 1 240px">
     project
     <select id="project"></select>
@@ -112,7 +125,20 @@
     <input id="live" type="checkbox" checked style="min-width:auto"> live
   </label>
   <button class="ghost" id="refresh">Refresh</button>
+  <button class="ghost" id="logout">Sign out</button>
 </header>
+
+<div id="gate">
+  <form id="login">
+    <h2>Muster backoffice</h2>
+    <p class="dim">Sign in with the backend's <code>ADMIN_PASSWORD</code>.</p>
+    <label>password
+      <input id="password" type="password" autocomplete="current-password" required autofocus>
+    </label>
+    <button>Sign in</button>
+    <p class="dim" id="login-error"></p>
+  </form>
+</div>
 
 <main>
   <section>
@@ -167,8 +193,9 @@
 <div id="toast"></div>
 
 <script>
-// Static page, no data of its own: everything below needs the admin token the
-// operator types in, which is kept in sessionStorage so it dies with the tab.
+// Static page with no data of its own. The operator signs in with
+// ADMIN_PASSWORD; the backend answers with an HttpOnly session cookie, so the
+// secret is never held in JS or in storage where a stray script could read it.
 // All values from the API (issue titles, lead names, event payloads) are
 // written with textContent, never innerHTML — they come from GitHub and from
 // agents, and this page is not where that text gets to run.
@@ -180,7 +207,6 @@ const el = (tag, props = {}, ...kids) => {
 };
 const td = (text, cls) => el("td", cls ? { textContent: text, className: cls } : { textContent: text });
 
-let token = sessionStorage.getItem("muster-admin-token") || "";
 let projectId = sessionStorage.getItem("muster-project") || "";
 let sinceEvent = 0;
 let logProject = null;
@@ -188,11 +214,42 @@ let seenEvents = 0;
 let chain = Promise.resolve();
 let queued = 0;
 
-$("token").value = token;
-$("token").addEventListener("change", (e) => {
-  token = e.target.value.trim();
-  sessionStorage.setItem("muster-admin-token", token);
-  loadProjects();
+function unlock() { document.body.classList.remove("locked"); }
+
+function lock(message) {
+  document.body.classList.add("locked");
+  $("login-error").textContent = message || "";
+  $("password").value = "";
+  $("password").focus();
+}
+
+$("login").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const button = e.target.querySelector("button");
+  button.disabled = true;
+  $("login-error").textContent = "";
+  try {
+    const res = await fetch("/admin/login", {
+      method: "POST", credentials: "same-origin",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ password: $("password").value })
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new Error(body.error || "sign in failed");
+    }
+    $("password").value = "";
+    unlock();
+    await loadProjects();
+  } catch (err) {
+    $("login-error").textContent = err.message;
+  } finally { button.disabled = false; }
+});
+
+$("logout").addEventListener("click", async () => {
+  await fetch("/admin/logout", { method: "POST", credentials: "same-origin" }).catch(() => {});
+  logProject = null;
+  lock("");
 });
 
 function toast(message, bad) {
@@ -205,12 +262,16 @@ function toast(message, bad) {
 }
 
 async function api(path, options = {}) {
-  if (!token) throw new Error("set the admin token first");
   const res = await fetch(path, {
     ...options,
-    headers: { Authorization: "Bearer " + token, ...(options.body ? { "content-type": "application/json" } : {}) }
+    credentials: "same-origin",
+    headers: { ...(options.body ? { "content-type": "application/json" } : {}) }
   });
-  if (res.status === 401) throw new Error("admin token rejected");
+  if (res.status === 401) {
+    // The session expired or the backend's password changed under us.
+    lock("Session expired. Sign in again.");
+    throw new Error("signed out");
+  }
   if (!res.ok) {
     let detail = res.status + " " + res.statusText;
     try { const j = await res.json(); if (j.error) detail = j.error; } catch {}
@@ -230,7 +291,10 @@ const ago = (iso) => {
 async function loadProjects() {
   let projects;
   try { projects = await api("/admin/projects"); }
-  catch (err) { toast(err.message, true); return; }
+  catch (err) {
+    if (!document.body.classList.contains("locked")) toast(err.message, true);
+    return;
+  }
 
   const select = $("project");
   select.replaceChildren(...projects.map(p => el("option", { value: p.id, textContent: p.slug + " — " + p.name })));
@@ -321,7 +385,7 @@ function refresh() {
 }
 
 async function doRefresh() {
-  if (!projectId || !token) return;
+  if (!projectId || document.body.classList.contains("locked")) return;
   if (logProject !== projectId) {
     // Switching projects starts the log over, and doing it here rather than in
     // loadProjects keeps it ordered with respect to whatever refresh is already
@@ -337,6 +401,7 @@ async function doRefresh() {
     ]);
     renderBoard(board); renderLeads(leads); renderEvents(events);
   } catch (err) {
+    if (document.body.classList.contains("locked")) return;   // the gate says it
     toast(err.message, true);
     $("live").checked = false;   // stop hammering a backend that is saying no
   }
@@ -392,7 +457,14 @@ $("reconcile").addEventListener("click", async () => {
   finally { $("reconcile").disabled = false; }
 });
 
-if (token) loadProjects();
+// A reload with a live cookie should land on the board, not the login form.
+fetch("/admin/session", { credentials: "same-origin" })
+  .then(res => {
+    if (!res.ok) return lock("");
+    unlock();                 // the gate has to lift, not just the data load
+    return loadProjects();
+  })
+  .catch(() => lock("Could not reach the backend."));
 </script>
 </body>
 </html>
