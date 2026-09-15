@@ -234,6 +234,25 @@ echo "$stream" | grep -q '^event: task.claimed' \
      -H 'Authorization: Bearer mstr_not-a-real-token')" = "401" ] \
   && pass "SSE stream rejects an unknown lead token" || fail "SSE stream accepted an unknown token"
 
+# since=latest is what the channel plugin uses on a cold start, so a session
+# opening now is not handed the whole project history.
+[ "$( { curl -sS --max-time 4 -N "$BACKEND_URL/events/stream?since=latest" \
+       -H "Authorization: Bearer $TOKEN_B" 2>/dev/null || true; } | grep -c '^id: ' || true)" = "0" ] \
+  && pass "SSE since=latest starts at the end of the log" \
+  || fail "SSE since=latest replayed history"
+
+# A reconnecting EventSource sends Last-Event-ID; it must win over the URL's
+# ?since= so a dropped stream resumes instead of replaying.
+# curl exits non-zero on --max-time, which is the only way an SSE read ends;
+# with set -e + pipefail that has to be swallowed explicitly.
+last_id=$( { curl -sS --max-time 4 -N "$BACKEND_URL/events/stream?since=0" \
+             -H "Authorization: Bearer $TOKEN_B" 2>/dev/null || true; } | sed -n 's/^id: //p' | tail -n 1)
+[ -n "$last_id" ] && [ "$( { curl -sS --max-time 4 -N "$BACKEND_URL/events/stream?since=0" \
+       -H "Authorization: Bearer $TOKEN_B" -H "Last-Event-ID: $last_id" 2>/dev/null || true; } \
+       | grep -c '^id: ' || true)" = "0" ] \
+  && pass "SSE Last-Event-ID resumes instead of replaying" \
+  || fail "SSE ignored Last-Event-ID"
+
 step "7. revocation"
 lead_a_id=$(admin GET "/admin/projects/$PROJECT_ID/leads" | jq -r '.[] | select(.name == "smoke-lead-a") | .id')
 admin DELETE "/admin/leads/$lead_a_id" >/dev/null
