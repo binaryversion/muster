@@ -22,12 +22,24 @@ applies it before any code that depends on it starts.
 ```bash
 POSTGRES_PASSWORD=$(openssl rand -base64 24)
 ADMIN_PASSWORD=$(openssl rand -base64 24)
+ENC_KEY=$(openssl rand -base64 32)
 ```
 
-Compose refuses to start without either. `ADMIN_PASSWORD` is both the backoffice
+Compose refuses to start without any of the three. `ADMIN_PASSWORD` is both the backoffice
 sign-in and the admin API bearer token; if it is unset the admin API answers 503
 rather than opening up, because an unauthenticated backoffice on a public URL is
 worse than a broken one.
+
+`ENC_KEY` keys the lead-token digests in the database. No credential is stored
+in a recoverable form — a token is digested, never encrypted, because a
+credential you can decrypt is one an attacker with the database and the key can
+replay. Keying the digest is what makes the database inert on its own: without
+`ENC_KEY` a dump, a backup or a read-only replica cannot even be used to test a
+guess offline.
+
+Rotating `ENC_KEY` invalidates every outstanding lead token at once. That is a
+kill switch when a dump leaks, and a chore otherwise: you have to reissue them.
+Both services need the same value.
 
 Everything else has a working default. See [`.env.example`](../.env.example).
 
@@ -131,6 +143,8 @@ exist nowhere else.
 ## Security checklist
 
 - [ ] `ADMIN_PASSWORD` is long and random, not a word you chose.
+- [ ] `ENC_KEY` is set and at least 32 bytes, and backed up somewhere other than
+      the database it protects. Losing it means reissuing every lead token.
 - [ ] TLS in front of the backend and the MCP server.
 - [ ] `db` is not published — the default binds it to loopback, and the proxy
       override removes the port entirely.

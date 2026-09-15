@@ -66,6 +66,8 @@ services:
       BACKEND_PORT: ${BACKEND_PORT:-8080}
       # Backoffice. Without this the admin API answers 503 rather than opening up.
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:?set ADMIN_PASSWORD in .env}
+      # Keys the token digests in the database. Both services must agree on it.
+      ENC_KEY: ${ENC_KEY:?set ENC_KEY in .env (openssl rand -base64 32)}
       ADMIN_SESSION_HOURS: ${ADMIN_SESSION_HOURS:-12}
       ADMIN_LOGIN_ATTEMPTS: ${ADMIN_LOGIN_ATTEMPTS:-8}
       TRUST_PROXY: ${TRUST_PROXY:-true}
@@ -101,6 +103,7 @@ services:
         condition: service_completed_successfully
     environment:
       <<: *database-url
+      ENC_KEY: ${ENC_KEY:?set ENC_KEY in .env (openssl rand -base64 32)}
       MCP_PORT: ${MCP_PORT:-8090}
       CLAIM_LEASE_SECONDS: ${CLAIM_LEASE_SECONDS:-1800}
     ports:

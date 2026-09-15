@@ -18,6 +18,13 @@ Each store task carries `github_repo` + `github_issue_number` (unique) and the i
 ## Events
 Append-only `events` table. Producers: MCP tools (claims, releases, completes, findings), webhooks (pr.merged, ci.failed, task.done). Consumers: SSE stream → channel plugin → running Claude Code sessions; backoffice; `muster_recent_events` for sessions that missed pushes.
 
+## Credentials at rest
+The only credential the store holds is a lead's bearer token, and it holds a digest of it, never the token. The digest is HMAC-SHA256 under `ENC_KEY`, not encryption: something you can decrypt is something an attacker with the database and the key can replay, whereas a keyed digest cannot be reversed at all and still verifies in one indexed equality. The property that buys is that the database alone is inert — a dump, a backup or a read-only replica gives an attacker nothing to test guesses against.
+
+`ADMIN_PASSWORD`, the webhook secret and the GitHub App key are environment only; they are never written to Postgres. Rotating `ENC_KEY` invalidates every outstanding lead token at once.
+
+Findings and event payloads are stored as written. They are agent-authored free text, so an agent that pastes a secret into a finding has leaked it — the fix is not to paste secrets, because encrypting that column would take full-text search with it.
+
 ## Trust
 Everything that arrives via a channel or message is untrusted text. Agents verify merge state with `git` rather than trusting a "PR merged" event, and never relay permission approvals between sessions.
 

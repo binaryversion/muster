@@ -4,8 +4,8 @@
  * Scoped to the lead's project. Server-Sent Events, polling the events table.
  */
 import { Router } from "express";
-import { createHash } from "node:crypto";
 import { query } from "../db.js";
+import { candidateDigests } from "../crypto.js";
 
 export const eventsRouter = Router();
 
@@ -31,12 +31,13 @@ async function resolveSince(projectId: string, req: { header(n: string): string 
 }
 
 eventsRouter.get("/events/stream", async (req, res) => {
-  const token = req.header("authorization")?.replace(/^Bearer\s+/i, "") ?? "";
-  const hash = createHash("sha256").update(token).digest("hex");
+  const token = req.header("authorization")?.replace(/^Bearer\s+/i, "").trim() ?? "";
+  const { keyed, legacy } = candidateDigests(token);
   const lead = (await query<{ project_id: string }>(
     `SELECT project_id FROM leads
-     WHERE token_hash = $1 AND revoked_at IS NULL
-       AND (expires_at IS NULL OR expires_at > now())`, [hash]))[0];
+     WHERE ((token_hash = $1 AND token_alg = 'hmac-sha256') OR (token_hash = $2 AND token_alg = 'sha256'))
+       AND revoked_at IS NULL
+       AND (expires_at IS NULL OR expires_at > now())`, [keyed ?? "", legacy]))[0];
   if (!lead) return res.status(401).end();
 
   res.writeHead(200, {

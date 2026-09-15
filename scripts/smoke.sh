@@ -119,6 +119,24 @@ pass "issued two lead tokens (shown once, stored hashed)"
      -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}')" = "401" ] \
   && pass "MCP rejects an unknown lead token" || fail "MCP accepted an unknown lead token"
 
+# What the database holds for a lead must never be usable on its own.
+if [ -n "${DATABASE_URL:-}" ] && command -v psql >/dev/null; then
+  [ "$(psql "$DATABASE_URL" -X -t -A -c \
+       "SELECT count(*) FROM leads WHERE project_id = '$PROJECT_ID' AND token_hash LIKE '%${TOKEN_A#mstr_}%'")" = "0" ] \
+    && pass "the issued token appears nowhere in the leads table" \
+    || fail "the plaintext token is recoverable from the database"
+
+  algs=$(psql "$DATABASE_URL" -X -t -A -c \
+         "SELECT DISTINCT token_alg FROM leads WHERE project_id = '$PROJECT_ID'")
+  if [ -n "${ENC_KEY:-}" ]; then
+    [ "$algs" = "hmac-sha256" ] \
+      && pass "token digests are keyed by ENC_KEY, so a stolen dump is inert" \
+      || fail "ENC_KEY is set but digests were stored as: $algs"
+  else
+    pass "ENC_KEY not set for this run; digest keying not exercised"
+  fi
+fi
+
 step "2. webhook: a GitHub issue becomes a task"
 payload=$(jq -nc --arg repo "$REPO" --argjson num "$ISSUE" \
   '{action:"opened",

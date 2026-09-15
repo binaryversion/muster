@@ -49,6 +49,3 @@ All six tasks from the original handoff are done.
    `docker-entrypoint-initdb.d`,** which only runs on a fresh volume. It is
    harmless alongside `scripts/migrate.sh` (which detects and backfills that
    case), but it is a trap worth removing.
-7. **README says MIT, `LICENSE` is GPL-3.0.** The scaffold's MIT text was
-   deliberately not committed over the repo's existing LICENSE; someone needs to
-   decide which is right and make the two agree.

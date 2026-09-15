@@ -44,7 +44,9 @@ humans plan on:
   no rate limit. GitHub sees a handful of batched calls per interval from one
   App installation.
 - **Per-machine access.** Issue a token per developer's laptop, revoke it when
-  the laptop walks out of the building.
+  the laptop walks out of the building. Nothing recoverable is stored: tokens
+  live in the database only as digests keyed by `ENC_KEY`, so a stolen dump
+  cannot even be used to test a guess.
 - **You can see what the agents are doing.** A board showing every claim, lease
   and token spend, and an append-only event log.
 
@@ -77,6 +79,7 @@ Set the two secrets in `.env` — compose refuses to start without them:
 ```bash
 POSTGRES_PASSWORD=$(openssl rand -base64 24)
 ADMIN_PASSWORD=$(openssl rand -base64 24)
+ENC_KEY=$(openssl rand -base64 32)
 ```
 
 Then:
@@ -140,6 +143,7 @@ to set are:
 |---|---|
 | `POSTGRES_PASSWORD` | compose refuses to start without it |
 | `ADMIN_PASSWORD` | backoffice sign-in and the admin API bearer token; unset, the admin API answers 503 rather than opening up |
+| `ENC_KEY` | keys the lead-token digests, so a stolen database dump is inert on its own |
 
 GitHub integration is optional. Without `GITHUB_APP_ID`, `GITHUB_APP_PRIVATE_KEY`
 and `GITHUB_WEBHOOK_SECRET`, the store, the MCP tools and the backoffice all
@@ -193,4 +197,5 @@ text, and there is no per-installation backoff when GitHub rate-limits.
 
 ## License
 
-See [`LICENSE`](LICENSE).
+MIT — free to use, modify and distribute, including commercially. See
+[`LICENSE`](LICENSE).

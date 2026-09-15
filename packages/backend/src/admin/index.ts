@@ -14,9 +14,10 @@
  *   GET    /admin/projects/:id/events?since=0
  */
 import { Router, type Request, type Response, type NextFunction } from "express";
-import { randomBytes, createHash } from "node:crypto";
+import { randomBytes } from "node:crypto";
 import { z } from "zod";
 import { query } from "../db.js";
+import { digestForStorage } from "../crypto.js";
 import { reconcileOnce } from "../sync/reconcile.js";
 import {
   adminSecret, requireAdmin, setSessionCookie, clearSessionCookie,
@@ -119,12 +120,12 @@ adminRouter.post("/admin/projects/:id/leads", wrap(async (req, res) => {
     expires_in_days: z.number().int().positive().optional()
   }).parse(req.body);
   const token = "mstr_" + randomBytes(24).toString("base64url");
-  const hash = createHash("sha256").update(token).digest("hex");
+  const { hash, alg } = digestForStorage(token);
   const rows = await query(
-    `INSERT INTO leads (project_id, name, token_hash, expires_at)
-     VALUES ($1,$2,$3, CASE WHEN $4::int IS NULL THEN NULL ELSE now() + make_interval(days => $4) END)
+    `INSERT INTO leads (project_id, name, token_hash, token_alg, expires_at)
+     VALUES ($1,$2,$3,$4, CASE WHEN $5::int IS NULL THEN NULL ELSE now() + make_interval(days => $5) END)
      RETURNING id, name, expires_at`,
-    [req.params.id, name, hash, expires_in_days ?? null]);
+    [req.params.id, name, hash, alg, expires_in_days ?? null]);
   // Only the hash is stored; the plaintext token is returned exactly once.
   res.status(201).json({ ...rows[0], token });
 }));
