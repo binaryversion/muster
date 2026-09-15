@@ -18,7 +18,7 @@ import { randomBytes } from "node:crypto";
 import { z } from "zod";
 import { query } from "../db.js";
 import { digestForStorage } from "../crypto.js";
-import { reconcileOnce } from "../sync/reconcile.js";
+import { startReconcile, reconcileRunning } from "../sync/reconcile.js";
 import {
   adminSecret, requireAdmin, setSessionCookie, clearSessionCookie,
   loginThrottle, noteLoginFailure, noteLoginSuccess, lockedOut, sameSecret
@@ -156,10 +156,21 @@ adminRouter.get("/admin/projects/:id/events", wrap(async (req, res) =>
 
 // Run a reconcile pass now instead of waiting for the nightly cron. ?full=1
 // forces a complete scan, which is the only pass that reports orphans.
-adminRouter.post("/admin/reconcile", wrap(async (req, res) => {
-  await reconcileOnce({ full: req.query.full === "1" || req.query.full === "true" });
-  res.json({ ok: true });
-}));
+//
+// Starts the job and answers immediately. A full scan paginates every issue in
+// every repo of every project, which on a real org outlives any reverse proxy's
+// timeout — the operator would get a 502 while the job was still running. The
+// result arrives through the event log as reconcile.completed, which the
+// backoffice already tails.
+adminRouter.post("/admin/reconcile", (req, res) => {
+  const full = req.query.full === "1" || req.query.full === "true";
+  if (!startReconcile({ full })) {
+    return res.status(409).json({ error: "a reconcile pass is already running" });
+  }
+  res.status(202).json({ started: true, full });
+});
+
+adminRouter.get("/admin/reconcile", (_req, res) => res.json({ running: reconcileRunning() }));
 
 // Turn a bad body into 400 rather than a 500 with a stack trace.
 adminRouter.use("/admin", (err: any, _req: Request, res: Response, next: NextFunction) => {

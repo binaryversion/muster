@@ -458,6 +458,7 @@ body.locked #gate { display:grid; }
           <div class="card-body">
             <p class="muted" style="margin:0 0 12px; font-size:13px">
               Webhooks get dropped. A full scan also reports tasks whose issue no longer exists; it never deletes them.
+              Passes run in the background — the result shows up in Events as <code class="mono">reconcile.completed</code>.
             </p>
             <div style="display:flex; gap:8px; flex-wrap:wrap">
               <button class="btn ghost" id="reconcile" data-icon-btn="sync">Incremental</button>
@@ -1000,8 +1001,11 @@ for (const [id, full] of [["reconcile", false], ["reconcile-full", true]]) {
     $(id).disabled = true;
     try {
       await api("/admin/reconcile" + (full ? "?full=1" : ""), { method: "POST" });
-      toast(full ? "Full reconcile finished" : "Reconcile finished");
-      await loadProjects();
+      // The backend answers as soon as the pass starts; a full scan can take
+      // minutes. The result arrives on its own as a reconcile.completed event.
+      toast(full ? "Full reconcile started — watch Events for the result"
+                 : "Reconcile started — watch Events for the result");
+      show("events");
     } catch (err) { toast(err.message, true); }
     finally { $(id).disabled = false; }
   });

@@ -308,6 +308,13 @@ curl -sS -o /dev/null -X POST "$BACKEND_URL/admin/logout" -H "Cookie: muster_adm
 [ "$(curl -sS -o /dev/null -w '%{http_code}' "$BACKEND_URL/ui/")" = "200" ] \
   && pass "the backoffice page is served" || fail "the backoffice page is missing"
 
+# A full scan can take minutes; the route must hand back control, not hold the
+# request open until a proxy times it out.
+[ "$(curl -sS -o /dev/null -w '%{http_code}' -X POST "$BACKEND_URL/admin/reconcile" \
+     -H "Authorization: Bearer $ADMIN_PASSWORD")" = "202" ] \
+  && pass "reconcile starts in the background and answers 202" \
+  || fail "reconcile did not answer 202"
+
 step "8. revocation"
 lead_a_id=$(admin GET "/admin/projects/$PROJECT_ID/leads" | jq -r '.[] | select(.name == "smoke-lead-a") | .id')
 admin DELETE "/admin/leads/$lead_a_id" >/dev/null

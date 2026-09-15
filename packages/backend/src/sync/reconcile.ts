@@ -182,6 +182,25 @@ export async function fetchIssues(octokit: Paginating, repo: string, since: stri
 }
 
 /**
+ * Is a pass running right now? The scheduled run is guarded by croner's
+ * `protect`, but the admin route is a button on a web page — two clicks would
+ * otherwise interleave two full scans, doubling the API spend and racing on
+ * `reconciled_at`.
+ */
+let running = false;
+export const reconcileRunning = () => running;
+
+/** Start a pass unless one is already going. Returns false if it was refused. */
+export function startReconcile(opts: { full?: boolean } = {}): boolean {
+  if (running) return false;
+  running = true;
+  reconcileOnce(opts)
+    .catch(err => console.error("reconcile error", err))
+    .finally(() => { running = false; });
+  return true;
+}
+
+/**
  * One pass over every project. `full` forces a complete scan, which is the only
  * way orphans are noticed; the scheduled run is incremental after the first.
  */
@@ -240,7 +259,9 @@ export function startReconcileLoop() {
   // protect: true skips a firing while the previous one is still running, so a
   // slow full scan cannot stack up behind itself.
   new Cron(expression, { timezone: "UTC", protect: true }, () => {
-    reconcileOnce().catch(e => console.error("reconcile error", e));
+    // Shares the lock with the admin route, so a scheduled pass and a button
+    // press cannot overlap either.
+    if (!startReconcile()) console.error("reconcile: skipped, a pass is already running");
   });
   console.log(`reconcile scheduled: ${expression} UTC`);
 }
