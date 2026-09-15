@@ -6,6 +6,8 @@
 import { Router } from "express";
 import { Webhooks } from "@octokit/webhooks";
 import { query, emit } from "../db.js";
+import { priorityFromLabels } from "../github/issue.js";
+import { syncDependencies } from "../github/deps.js";
 
 const webhooks = new Webhooks({ secret: process.env.GITHUB_WEBHOOK_SECRET ?? "unset" });
 
@@ -15,18 +17,24 @@ async function projectForRepo(fullName: string) {
   return rows[0]?.id;
 }
 
-webhooks.on(["issues.opened", "issues.edited", "issues.reopened"], async ({ payload }) => {
-  const repo = payload.repository.full_name;
-  const pid = await projectForRepo(repo); if (!pid) return;
-  const i = payload.issue;
-  await query(
-    `INSERT INTO tasks (project_id, title, body, source, github_repo, github_issue_number, github_node_id, status)
-     VALUES ($1,$2,$3,'human',$4,$5,$6,'ready')
-     ON CONFLICT (github_repo, github_issue_number) DO UPDATE
-       SET title = EXCLUDED.title, body = EXCLUDED.body,   -- GitHub wins on human fields
-           status = CASE WHEN tasks.status = 'cancelled' THEN 'ready'::task_status ELSE tasks.status END`,
-    [pid, i.title, i.body ?? "", repo, i.number, i.node_id]);
-});
+// `issues.labeled`/`unlabeled` carry the full label set too, and they are how a
+// human changes priority without touching the issue body.
+webhooks.on(["issues.opened", "issues.edited", "issues.reopened", "issues.labeled", "issues.unlabeled"],
+  async ({ payload }) => {
+    const repo = payload.repository.full_name;
+    const pid = await projectForRepo(repo); if (!pid) return;
+    const i = payload.issue;
+    const rows = await query<{ id: string }>(
+      `INSERT INTO tasks (project_id, title, body, priority, source, github_repo, github_issue_number, github_node_id, status)
+       VALUES ($1,$2,$3,$4,'human',$5,$6,$7,'ready')
+       ON CONFLICT (github_repo, github_issue_number) DO UPDATE
+         SET title = EXCLUDED.title, body = EXCLUDED.body,   -- GitHub wins on human fields
+             priority = EXCLUDED.priority,
+             status = CASE WHEN tasks.status = 'cancelled' THEN 'ready'::task_status ELSE tasks.status END
+       RETURNING id`,
+      [pid, i.title, i.body ?? "", priorityFromLabels(i.labels as any), repo, i.number, i.node_id]);
+    if (rows[0]) await syncDependencies(pid, rows[0].id, repo, i.body);
+  });
 
 webhooks.on("issues.closed", async ({ payload }) => {
   const repo = payload.repository.full_name;

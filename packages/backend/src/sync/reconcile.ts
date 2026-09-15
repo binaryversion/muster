@@ -13,6 +13,8 @@
 import { Cron } from "croner";
 import { query, emit } from "../db.js";
 import { makeApp, githubConfigured } from "../github/app.js";
+import { priorityFromLabels } from "../github/issue.js";
+import { syncDependencies } from "../github/deps.js";
 
 export interface IssueSnapshot {
   repo: string;
@@ -22,6 +24,8 @@ export interface IssueSnapshot {
   body: string;
   /** GitHub's view, which wins for open/closed. */
   state: "open" | "closed";
+  /** Derived from the issue's labels; GitHub owns it. */
+  priority: number;
 }
 
 export interface StoreTask {
@@ -29,6 +33,7 @@ export interface StoreTask {
   title: string;
   body: string | null;
   status: string;
+  priority: number;
   github_repo: string;
   github_issue_number: number;
 }
@@ -74,9 +79,10 @@ export function planReconcile(tasks: StoreTask[], issues: IssueSnapshot[], full 
     } else if (issue.state === "open" && task.status === "done") {
       // issues.reopened never landed.
       actions.push({ kind: "reopen", taskId: task.id, issue });
-    } else if (task.title !== issue.title || (task.body ?? "") !== issue.body) {
-      // issues.edited never landed. Never reported alongside a state change:
-      // the close/reopen writes the text too.
+    } else if (task.title !== issue.title || (task.body ?? "") !== issue.body
+               || Number(task.priority) !== issue.priority) {
+      // issues.edited or a label change never landed. Never reported alongside
+      // a state change: close/reopen writes the text and priority too.
       actions.push({ kind: "update", taskId: task.id, issue });
     }
   }
@@ -104,12 +110,14 @@ export async function applyPlan(projectId: string, actions: ReconcileAction[]): 
       case "create": {
         const i = action.issue;
         const rows = await query<{ id: string }>(
-          `INSERT INTO tasks (project_id, title, body, source, github_repo, github_issue_number, github_node_id, status)
-           VALUES ($1,$2,$3,'human',$4,$5,$6,$7::task_status)
+          `INSERT INTO tasks (project_id, title, body, source, github_repo, github_issue_number, github_node_id, status, priority)
+           VALUES ($1,$2,$3,'human',$4,$5,$6,$7::task_status,$8)
            ON CONFLICT (github_repo, github_issue_number) DO NOTHING
            RETURNING id`,
-          [projectId, i.title, i.body, i.repo, i.number, i.node_id, i.state === "closed" ? "done" : "ready"]);
+          [projectId, i.title, i.body, i.repo, i.number, i.node_id,
+           i.state === "closed" ? "done" : "ready", i.priority]);
         if (!rows[0]) break;   // a webhook beat us to it between plan and apply
+        await syncDependencies(projectId, rows[0].id, i.repo, i.body);
         counts.created++;
         await emit(projectId, "task.recovered", "reconcile",
           { task_id: rows[0].id, repo: i.repo, issue: i.number, title: i.title,
@@ -117,15 +125,17 @@ export async function applyPlan(projectId: string, actions: ReconcileAction[]): 
         break;
       }
       case "update":
-        await query("UPDATE tasks SET title=$2, body=$3 WHERE id=$1",
-          [action.taskId, action.issue.title, action.issue.body]);
+        await query("UPDATE tasks SET title=$2, body=$3, priority=$4 WHERE id=$1",
+          [action.taskId, action.issue.title, action.issue.body, action.issue.priority]);
+        // The body changed, so what it declares may have changed with it.
+        await syncDependencies(projectId, action.taskId, action.issue.repo, action.issue.body);
         counts.updated++;
         break;
       case "close":
         // Same effect as the issues.closed webhook: done, and the lease goes.
         await query(
-          `UPDATE tasks SET status='done', claimed_by=NULL, lease_until=NULL, title=$2, body=$3
-           WHERE id=$1`, [action.taskId, action.issue.title, action.issue.body]);
+          `UPDATE tasks SET status='done', claimed_by=NULL, lease_until=NULL, title=$2, body=$3, priority=$4
+           WHERE id=$1`, [action.taskId, action.issue.title, action.issue.body, action.issue.priority]);
         counts.closed++;
         await emit(projectId, "task.done", "reconcile",
           { task_id: action.taskId, repo: action.issue.repo, issue: action.issue.number,
@@ -134,8 +144,8 @@ export async function applyPlan(projectId: string, actions: ReconcileAction[]): 
       case "reopen":
         // Back into the pool, unclaimed. It is not in progress until someone claims it.
         await query(
-          `UPDATE tasks SET status='ready', claimed_by=NULL, lease_until=NULL, title=$2, body=$3
-           WHERE id=$1`, [action.taskId, action.issue.title, action.issue.body]);
+          `UPDATE tasks SET status='ready', claimed_by=NULL, lease_until=NULL, title=$2, body=$3, priority=$4
+           WHERE id=$1`, [action.taskId, action.issue.title, action.issue.body, action.issue.priority]);
         counts.reopened++;
         await emit(projectId, "task.released", "reconcile",
           { task_id: action.taskId, note: `issue ${action.issue.repo}#${action.issue.number} was reopened on GitHub` });
@@ -166,7 +176,8 @@ export async function fetchIssues(octokit: Paginating, repo: string, since: stri
     .map((i: any): IssueSnapshot => ({
       repo, number: i.number, node_id: i.node_id,
       title: i.title, body: i.body ?? "",
-      state: i.state === "closed" ? "closed" : "open"
+      state: i.state === "closed" ? "closed" : "open",
+      priority: priorityFromLabels(i.labels)
     }));
 }
 
@@ -200,7 +211,7 @@ export async function reconcileOnce(opts: { full?: boolean } = {}) {
       }
 
       const tasks = await query<StoreTask>(
-        `SELECT id, title, body, status::text AS status, github_repo, github_issue_number
+        `SELECT id, title, body, status::text AS status, priority, github_repo, github_issue_number
          FROM tasks WHERE project_id = $1 AND github_issue_number IS NOT NULL`, [project.id]);
 
       const counts = await applyPlan(project.id, planReconcile(tasks, issues, full));

@@ -7,7 +7,7 @@
 | status, claimed_by, lease_until, cost_tokens | agent (store) | store |
 | source | set on creation | never changes |
 
-An agent never rewrites priorities a human set. A human closing an issue on GitHub forces `done` in the store and releases the claim.
+An agent never rewrites priorities a human set. Priority comes from the issue's labels and dependencies from its body; see `docs/GITHUB_APP.md` for both. A human closing an issue on GitHub forces `done` in the store and releases the claim.
 
 ## Identity map
 Each store task carries `github_repo` + `github_issue_number` (unique) and the issue `github_node_id`. `github_item_id` is the Projects v2 item id once resolved. Without this map every sync would create duplicates.

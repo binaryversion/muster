@@ -91,3 +91,52 @@ board is touched.
 Issues a human has not put on the board have no item, and the mirror does not
 add them. The board is the humans' plan; the mirror only writes the columns
 agents own (see `docs/ARCHITECTURE.md`).
+
+## What Muster reads off an issue
+
+Beyond title and body, two things are read from the issue itself. Both are
+re-read on every `issues.*` webhook and on every reconcile, so they stay correct
+even if a delivery is missed.
+
+### Priority
+
+From the issue's labels. `tasks.priority` is an int where **1 is most urgent**,
+and `muster_list_available_tasks` orders by it.
+
+| Label | Priority |
+|---|---|
+| `P0`, `P1`, `critical`, `urgent`, `blocker` | 1 |
+| `P2`, `high`, `important` | 2 |
+| `P3`, `medium`, `normal` | 3 |
+| `P4`, `low`, `minor` | 4 |
+| `P5`, `trivial`, `nice-to-have` | 5 |
+
+A `priority:`, `priority/`, `prio:` or `pri:` prefix is ignored, as is a
+` priority` suffix, so `priority: high` and `high priority` both work. `P0` and
+`P1` both mean 1, because teams number from either 0 or 1 and clamping is kinder
+than guessing which scheme a repo uses. If several match, the most urgent wins.
+No recognised label means the default of 3 — which is also how you clear a
+priority: remove the label.
+
+### Dependencies
+
+From the issue body. A line containing **depends on**, **blocked by**,
+**requires** or **needs** contributes every issue reference after the keyword on
+that line:
+
+```
+Depends on #12 and #13
+Blocked by acme/api#4
+```
+
+`claim_task()` refuses a task whose dependencies are not `done`, so this is what
+makes ordering real rather than advisory.
+
+Only references *after* the keyword *on that line* count. A body that merely
+mentions `#12`, or says `Fixes #12`, creates nothing — a false positive here is
+a task nobody can claim, which is worse than a missed one.
+
+The body is the source of truth: delete the line and the dependency goes. An
+edge that would close a loop is refused and reported as a
+`task.dependency_refused` event, because every task in a cycle becomes
+permanently unclaimable while `claim_task` reports it as ordinary waiting.
