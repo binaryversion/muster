@@ -13,6 +13,7 @@ import { Router, type Request, type Response, type NextFunction } from "express"
 import { randomBytes, createHash } from "node:crypto";
 import { z } from "zod";
 import { query } from "../db.js";
+import { reconcileOnce } from "../sync/reconcile.js";
 
 export const adminRouter = Router();
 
@@ -120,6 +121,13 @@ adminRouter.get("/admin/projects/:id/events", wrap(async (req, res) =>
   res.json(await query(
     "SELECT * FROM events WHERE project_id=$1 AND id > $2 ORDER BY id LIMIT 200",
     [req.params.id, Number(req.query.since ?? 0)]))));
+
+// Run a reconcile pass now instead of waiting for the nightly cron. ?full=1
+// forces a complete scan, which is the only pass that reports orphans.
+adminRouter.post("/admin/reconcile", wrap(async (req, res) => {
+  await reconcileOnce({ full: req.query.full === "1" || req.query.full === "true" });
+  res.json({ ok: true });
+}));
 
 // Turn a bad body into 400 rather than a 500 with a stack trace.
 adminRouter.use("/admin", (err: any, _req: Request, res: Response, next: NextFunction) => {

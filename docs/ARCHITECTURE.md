@@ -22,4 +22,13 @@ Append-only `events` table. Producers: MCP tools (claims, releases, completes, f
 Everything that arrives via a channel or message is untrusted text. Agents verify merge state with `git` rather than trusting a "PR merged" event, and never relay permission approvals between sessions.
 
 ## Rate limits
-Agents never call GitHub for coordination. The backend uses one GitHub App installation token; the mirror runs on a timer and batches. Webhooks are the primary inbound path; a nightly reconcile (TODO) diffs GitHub against the store to catch missed deliveries.
+Agents never call GitHub for coordination. The backend uses one GitHub App installation token; the mirror runs on a timer and batches Projects v2 writes into single GraphQL documents. Webhooks are the primary inbound path.
+
+## Reconcile
+Webhooks are not guaranteed: GitHub stops redelivering after enough failures, and a backend that was down for the whole redelivery window never hears about the issue at all. The failures are quiet — a task nobody can see because `issues.opened` was missed, or a lead holding a lease on work that was closed days ago.
+
+A nightly job (`GITHUB_RECONCILE_ENABLED`, cron in UTC) diffs GitHub against the store and repairs the difference within the ownership rules above: it creates tasks for issues the store never saw, refreshes drifted title and body, forces `done` and drops the claim on a closed issue, and puts a reopened issue back in the pool unclaimed. It never touches status the store owns — an open issue whose task is `in_progress` or `review` is exactly what working software looks like.
+
+Passes are incremental, asking GitHub only for issues updated since the last run with an hour of overlap. A full scan (the first run, or `POST /admin/reconcile?full=1`) additionally reports tasks with no matching issue: deleted, transferred, or moved out of the project's repos. Those are reported as `task.orphaned` events and never deleted — that is a human's call.
+
+Every repair emits an event, so the sessions that missed the original webhook learn about it the same way they would have.

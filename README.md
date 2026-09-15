@@ -64,7 +64,11 @@ Check muster_search_findings before debugging environment or tooling issues.
 See `docs/` for the GitHub App setup, lead onboarding and the architecture/tie-break rules.
 
 ## Status
-Scaffold. Builds, schema is complete, tool semantics are final. Not yet done: Projects v2 Status field write-back (labels are mirrored today), reconcile job, backoffice UI. Contributions welcome.
+Early but working end to end. `scripts/smoke.sh` exercises the whole path — admin API, signed webhook, claim/heartbeat/complete over MCP, the claim race, findings, the event log and the SSE stream — and runs in CI against Postgres 16.
+
+Done: the store and its atomic claim, the `muster_*` MCP tools, signed and idempotent webhooks, the backoffice API and UI, the SSE stream, the channel plugin (verified against the Claude Code channel contract), label and Projects v2 Status mirroring, and the nightly reconcile.
+
+Not yet done: priority is never read back from GitHub (no field is mapped to it), findings search is `ILIKE` rather than real full text, and the mirror has no per-repo backoff when GitHub rate-limits. Contributions welcome.
 
 ## License
 MIT
