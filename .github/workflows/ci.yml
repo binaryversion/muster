@@ -10,10 +10,11 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with: { node-version: 22 }
-      # crypto.ts is duplicated because the two packages install separately;
-      # they must agree byte for byte or leads stop authenticating.
-      - name: shared crypto module is in sync
-        run: diff packages/backend/src/crypto.ts packages/mcp-server/src/crypto.ts
+      # The shared module is copied into each package rather than depended on,
+      # because each Dockerfile's build context is its own directory. Drift
+      # means leads authenticating against one service and not the other.
+      - name: generated copies match packages/shared
+        run: ./scripts/sync-shared.sh --check
       - run: npm ci
         working-directory: packages/${{ matrix.pkg }}
       - run: npm run build
