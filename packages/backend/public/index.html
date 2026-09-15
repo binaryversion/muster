@@ -3,225 +3,912 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Muster backoffice</title>
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='4' fill='%237c5cff'/%3E%3Cpath d='M4 11V5l4 3 4-3v6' fill='none' stroke='white' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+<title>Muster</title>
+<meta name="color-scheme" content="light dark">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%236d5efc'/%3E%3Cpath d='M8 22V10l8 6 8-6v12' fill='none' stroke='white' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
 <style>
+/* ── tokens ──────────────────────────────────────────────────────────────── */
+:root {
+  --bg:#f7f7f8; --bg-sub:#f0f0f2; --panel:#ffffff; --panel-2:#fafafa;
+  --ink:#18181b; --ink-2:#3f3f46; --muted:#71717a; --faint:#a1a1aa;
+  --line:#e4e4e7; --line-2:#d4d4d8;
+  --accent:#6d5efc; --accent-ink:#ffffff; --accent-soft:#eeebff;
+  --ok:#0f8a5f; --ok-soft:#e3f5ec;
+  --warn:#b45309; --warn-soft:#fdf0dc;
+  --bad:#c0362c; --bad-soft:#fdeceb;
+  --info:#2563a8; --info-soft:#e6f0fb;
+  --shadow:0 1px 2px rgba(24,24,27,.05), 0 8px 24px -12px rgba(24,24,27,.18);
+  --shadow-lg:0 2px 4px rgba(24,24,27,.06), 0 24px 48px -20px rgba(24,24,27,.28);
+  --r:10px; --r-lg:14px;
+  --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
+  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,"Helvetica Neue",Arial,sans-serif;
+}
+@media (prefers-color-scheme: dark) {
   :root {
-    --bg: #fbfbfa; --panel: #fff; --ink: #1c1b1a; --dim: #6b6763; --line: #e4e1dd;
-    --accent: #7c5cff; --ok: #1a7f52; --warn: #a8600a; --bad: #b3261e;
-    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+    --bg:#0a0a0c; --bg-sub:#0f0f12; --panel:#141417; --panel-2:#18181c;
+    --ink:#f4f4f5; --ink-2:#d4d4d8; --muted:#8b8b96; --faint:#6b6b76;
+    --line:#26262b; --line-2:#33333a;
+    --accent:#8b7cff; --accent-ink:#0a0a0c; --accent-soft:#1e1b33;
+    --ok:#3ecf8e; --ok-soft:#10261d;
+    --warn:#e9a23b; --warn-soft:#2a1f0e;
+    --bad:#ff6b5e; --bad-soft:#2d1512;
+    --info:#5aa7f0; --info-soft:#0e1c2b;
+    --shadow:0 1px 2px rgba(0,0,0,.5), 0 8px 24px -12px rgba(0,0,0,.7);
+    --shadow-lg:0 2px 4px rgba(0,0,0,.5), 0 24px 48px -20px rgba(0,0,0,.8);
   }
-  @media (prefers-color-scheme: dark) {
-    :root {
-      --bg: #17161a; --panel: #1f1e23; --ink: #eceaf0; --dim: #9b96a3; --line: #302e36;
-      --accent: #a68cff; --ok: #5fd39b; --warn: #e0a856; --bad: #ff8a80;
-    }
-  }
-  * { box-sizing: border-box; }
-  body {
-    margin: 0; background: var(--bg); color: var(--ink);
-    font: 14px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
-  }
-  header {
-    display: flex; gap: 12px; align-items: center; flex-wrap: wrap;
-    padding: 12px 20px; border-bottom: 1px solid var(--line); background: var(--panel);
-    position: sticky; top: 0; z-index: 2;
-  }
-  h1 { font-size: 15px; margin: 0; font-weight: 650; letter-spacing: -0.01em; }
-  h1 small { color: var(--dim); font-weight: 400; margin-left: 8px; }
-  main { padding: 20px; display: grid; gap: 20px; max-width: 1400px; }
-  section { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; }
-  section > h2 {
-    font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--dim);
-    margin: 0; padding: 12px 16px; border-bottom: 1px solid var(--line);
-    display: flex; gap: 10px; align-items: center;
-  }
-  section > h2 .spacer { flex: 1; }
-  section > h2 .dim { text-transform: none; letter-spacing: 0; font-weight: 400; }
-  .body { padding: 14px 16px; }
-  .cols { display: grid; gap: 20px; grid-template-columns: minmax(300px, 1fr) minmax(360px, 1.4fr); }
-  @media (max-width: 900px) { .cols { grid-template-columns: 1fr; } main { padding: 12px; } }
+}
+*,*::before,*::after { box-sizing:border-box; }
+html,body { height:100%; }
+body {
+  margin:0; background:var(--bg); color:var(--ink);
+  font:14px/1.55 var(--sans); -webkit-font-smoothing:antialiased;
+  letter-spacing:-0.006em;
+}
+h1,h2,h3 { margin:0; font-weight:600; letter-spacing:-0.02em; }
+a { color:var(--accent); }
+::selection { background:var(--accent-soft); }
 
-  table { width: 100%; border-collapse: collapse; }
-  th, td { text-align: left; padding: 7px 16px; border-bottom: 1px solid var(--line); vertical-align: top; }
-  th { font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--dim); font-weight: 600; }
-  tr:last-child td { border-bottom: 0; }
-  td.num { text-align: right; font-variant-numeric: tabular-nums; }
+/* ── app shell ───────────────────────────────────────────────────────────── */
+#app { display:none; min-height:100%; grid-template-rows:auto 1fr; }
+body:not(.locked) #app { display:grid; }
 
-  input, select, button, textarea { font: inherit; color: inherit; }
-  input, select {
-    background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 6px 9px; min-width: 0;
-  }
-  input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
-  button {
-    background: var(--ink); color: var(--panel); border: 0; border-radius: 6px;
-    padding: 6px 12px; cursor: pointer; font-weight: 550;
-  }
-  button.ghost { background: transparent; color: var(--ink); border: 1px solid var(--line); font-weight: 450; }
-  button.danger { background: transparent; color: var(--bad); border: 1px solid var(--line); font-weight: 450; }
-  button:disabled { opacity: 0.45; cursor: default; }
-  label { display: grid; gap: 4px; font-size: 12px; color: var(--dim); }
-  form.row { display: flex; gap: 8px; align-items: end; flex-wrap: wrap; }
-  form.row label { flex: 1 1 130px; }
+.topbar {
+  display:flex; align-items:center; gap:14px; padding:0 18px; min-height:56px;
+  background:color-mix(in srgb, var(--panel) 88%, transparent);
+  backdrop-filter:saturate(1.6) blur(12px);
+  border-bottom:1px solid var(--line); position:sticky; top:0; z-index:30;
+}
+.brand { display:flex; align-items:center; gap:9px; font-weight:650; letter-spacing:-0.03em; font-size:15px; }
+.brand .mark {
+  width:26px; height:26px; border-radius:7px; background:var(--accent);
+  display:grid; place-items:center; color:#fff; flex:none;
+  box-shadow:0 2px 8px -2px color-mix(in srgb, var(--accent) 70%, transparent);
+}
+.brand .mark svg { width:16px; height:16px; }
+.grow { flex:1 1 auto; }
 
-  .pill {
-    display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 11px;
-    border: 1px solid var(--line); white-space: nowrap;
-  }
-  .s-ready .pill, .s-backlog .pill { color: var(--dim); }
-  .s-in_progress .pill { color: var(--accent); border-color: currentColor; }
-  .s-review .pill { color: var(--warn); border-color: currentColor; }
-  .s-done .pill { color: var(--ok); border-color: currentColor; }
-  .s-cancelled .pill { color: var(--dim); text-decoration: line-through; }
+.shell { display:grid; grid-template-columns:212px 1fr; min-height:0; }
+.side {
+  border-right:1px solid var(--line); padding:16px 12px; background:var(--bg-sub);
+  display:flex; flex-direction:column; gap:22px; position:sticky; top:56px;
+  height:calc(100vh - 56px); overflow:auto;
+}
+.side .group-label {
+  font-size:10.5px; font-weight:650; text-transform:uppercase; letter-spacing:.09em;
+  color:var(--faint); padding:0 10px 7px;
+}
+.nav { display:flex; flex-direction:column; gap:2px; }
+.nav button {
+  display:flex; align-items:center; gap:10px; width:100%; text-align:left;
+  padding:8px 10px; border:0; border-radius:8px; background:transparent;
+  color:var(--ink-2); font:inherit; font-weight:500; cursor:pointer;
+  transition:background .12s, color .12s;
+}
+.nav button:hover { background:color-mix(in srgb, var(--ink) 6%, transparent); color:var(--ink); }
+.nav button.on { background:var(--panel); color:var(--ink); box-shadow:var(--shadow); font-weight:600; }
+.nav button.on svg { color:var(--accent); }
+.nav svg { width:16px; height:16px; flex:none; color:var(--faint); }
+.nav .count {
+  margin-left:auto; font:11px/1 var(--mono); color:var(--faint);
+  background:color-mix(in srgb, var(--ink) 7%, transparent);
+  padding:3px 6px; border-radius:20px;
+}
+main { padding:22px 26px 60px; min-width:0; max-width:1500px; }
+@media (max-width:640px) {
+  /* Nothing in the bar wraps, so drop the labels and keep the icons. */
+  .topbar { gap:10px; padding:0 12px; }
+  .topbar .btn .lbl { display:none; }
+  .topbar .btn { padding:7px 9px; }
+  .topbar .switch .lbl { display:none; }
+  .topbar label.field { width:auto !important; flex:1 1 80px; min-width:0; }
+}
+@media (max-width:900px) {
+  .shell { grid-template-columns:1fr; }
+  .side { position:static; height:auto; flex-direction:row; align-items:center; overflow-x:auto; padding:10px; }
+  .side .group-label, .side .side-foot { display:none; }
+  .nav { flex-direction:row; }
+  main { padding:16px; }
+}
 
-  .mono { font-family: var(--mono); font-size: 12px; }
-  .dim { color: var(--dim); }
-  .stale { color: var(--bad); }
-  .empty { padding: 22px 16px; color: var(--dim); text-align: center; }
-  #log { max-height: 460px; overflow: auto; }
-  #log td:first-child { white-space: nowrap; }
-  #log .payload { color: var(--dim); word-break: break-word; }
-  #toast {
-    position: fixed; inset: auto 20px 20px auto; background: var(--ink); color: var(--panel);
-    padding: 9px 14px; border-radius: 8px; max-width: 460px; opacity: 0; pointer-events: none;
-    transition: opacity .15s;
-  }
-  #toast.show { opacity: 1; }
-  #token-out {
-    display: none; margin-top: 12px; padding: 10px 12px; border: 1px solid var(--accent);
-    border-radius: 8px; background: var(--bg);
-  }
-  #token-out.show { display: block; }
-  code { font-family: var(--mono); font-size: 12px; word-break: break-all; }
+/* ── controls ────────────────────────────────────────────────────────────── */
+.btn {
+  display:inline-flex; align-items:center; gap:7px; padding:7px 13px;
+  border-radius:8px; border:1px solid transparent; background:var(--accent);
+  color:var(--accent-ink); font:inherit; font-weight:600; cursor:pointer;
+  transition:filter .12s, transform .06s, background .12s, border-color .12s;
+  white-space:nowrap;
+}
+.btn:hover { filter:brightness(1.08); }
+.btn:active { transform:translateY(.5px); }
+.btn:disabled { opacity:.5; cursor:not-allowed; filter:none; }
+.btn.ghost { background:var(--panel); color:var(--ink); border-color:var(--line-2); font-weight:500; }
+.btn.ghost:hover { background:var(--panel-2); border-color:var(--muted); filter:none; }
+.btn.subtle { background:transparent; color:var(--muted); border-color:transparent; }
+.btn.subtle:hover { background:color-mix(in srgb, var(--ink) 7%, transparent); color:var(--ink); filter:none; }
+.btn.danger { background:transparent; color:var(--bad); border-color:var(--line-2); font-weight:500; }
+.btn.danger:hover { background:var(--bad-soft); border-color:var(--bad); filter:none; }
+.btn.sm { padding:4px 9px; font-size:12.5px; border-radius:7px; }
+.btn svg { width:14px; height:14px; }
 
-  /* Login gate. The page is public; nothing in it works without the password. */
-  #gate {
-    position: fixed; inset: 0; z-index: 10; background: var(--bg);
-    display: none; align-items: center; justify-content: center; padding: 20px;
-  }
-  body.locked #gate { display: flex; }
-  body.locked > header, body.locked > main { display: none; }
-  #login {
-    background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
-    padding: 26px; width: 100%; max-width: 360px; display: grid; gap: 14px;
-  }
-  #login h2 { margin: 0; font-size: 17px; }
-  #login p { margin: 0; font-size: 12px; }
-  #login button { padding: 9px 12px; }
-  #login-error:empty { display: none; }
-  #login-error { color: var(--bad); }
+input, select, textarea {
+  font:inherit; color:var(--ink); background:var(--panel);
+  border:1px solid var(--line-2); border-radius:8px; padding:7px 10px; width:100%;
+  transition:border-color .12s, box-shadow .12s;
+}
+input::placeholder { color:var(--faint); }
+input:focus, select:focus, textarea:focus {
+  outline:none; border-color:var(--accent);
+  box-shadow:0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
+}
+select { cursor:pointer; padding-right:28px; appearance:none;
+  background-image:linear-gradient(45deg,transparent 50%,currentColor 50%),linear-gradient(135deg,currentColor 50%,transparent 50%);
+  background-position:calc(100% - 15px) 52%, calc(100% - 10px) 52%;
+  background-size:5px 5px, 5px 5px; background-repeat:no-repeat; }
+label.field { display:grid; gap:5px; font-size:12px; font-weight:500; color:var(--muted); min-width:0; }
+.switch { display:inline-flex; align-items:center; gap:7px; font-size:12.5px; color:var(--muted); cursor:pointer; user-select:none; }
+.switch input { appearance:none; width:32px; height:18px; border-radius:20px; background:var(--line-2);
+  border:0; padding:0; position:relative; cursor:pointer; transition:background .16s; flex:none; }
+.switch input::after { content:""; position:absolute; inset:2px auto 2px 2px; width:14px; border-radius:50%;
+  background:#fff; transition:transform .16s; box-shadow:0 1px 2px rgba(0,0,0,.3); }
+.switch input:checked { background:var(--ok); }
+.switch input:checked::after { transform:translateX(14px); }
+.switch input:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+
+/* ── surfaces ────────────────────────────────────────────────────────────── */
+.card { background:var(--panel); border:1px solid var(--line); border-radius:var(--r-lg); box-shadow:var(--shadow); }
+.card + .card { margin-top:18px; }
+.card-head {
+  display:flex; align-items:center; gap:12px; padding:14px 18px;
+  border-bottom:1px solid var(--line);
+}
+.card-head h2 { font-size:14px; }
+.card-head .sub { font-size:12px; color:var(--muted); font-weight:400; }
+.card-body { padding:16px 18px; }
+
+.view { display:none; animation:rise .22s ease both; }
+.view.on { display:block; }
+@keyframes rise { from { opacity:0; transform:translateY(5px); } to { opacity:1; transform:none; } }
+
+.page-head { display:flex; align-items:flex-end; gap:14px; margin-bottom:18px; flex-wrap:wrap; }
+.page-head h1 { font-size:21px; }
+.page-head p { margin:3px 0 0; color:var(--muted); font-size:13px; }
+
+/* ── stats ───────────────────────────────────────────────────────────────── */
+.stats { display:grid; grid-template-columns:repeat(auto-fit,minmax(158px,1fr)); gap:12px; margin-bottom:18px; }
+.stat {
+  background:var(--panel); border:1px solid var(--line); border-radius:var(--r);
+  padding:13px 15px; box-shadow:var(--shadow); position:relative; overflow:hidden;
+}
+.stat::before { content:""; position:absolute; inset:0 auto 0 0; width:3px; background:var(--tone,var(--line-2)); }
+.stat .k { font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:.07em; color:var(--muted); }
+.stat .v { font-size:25px; font-weight:650; letter-spacing:-0.035em; margin-top:3px; font-variant-numeric:tabular-nums; }
+.stat .n { font-size:11.5px; color:var(--faint); margin-top:1px; }
+
+/* ── table ───────────────────────────────────────────────────────────────── */
+.tablewrap { overflow-x:auto; }
+table { width:100%; border-collapse:collapse; }
+th {
+  text-align:left; font-size:10.5px; font-weight:650; text-transform:uppercase;
+  letter-spacing:.08em; color:var(--faint); padding:9px 18px;
+  border-bottom:1px solid var(--line); white-space:nowrap;
+  position:sticky; top:0; background:var(--panel); z-index:1;
+}
+td { padding:11px 18px; border-bottom:1px solid var(--line); vertical-align:middle; }
+tbody tr { transition:background .1s; }
+tbody tr:hover { background:var(--panel-2); }
+tbody tr:last-child td { border-bottom:0; }
+td.num { text-align:right; font-variant-numeric:tabular-nums; }
+.t-title { font-weight:520; }
+.t-sub { font:11.5px/1.4 var(--mono); color:var(--faint); margin-top:2px; }
+
+/* ── bits ────────────────────────────────────────────────────────────────── */
+.chip {
+  display:inline-flex; align-items:center; gap:5px; padding:2.5px 9px; border-radius:20px;
+  font-size:11.5px; font-weight:560; white-space:nowrap;
+  background:var(--chip-bg,var(--bg-sub)); color:var(--chip-fg,var(--muted));
+}
+.chip .dot { width:5px; height:5px; border-radius:50%; background:currentColor; flex:none; }
+.s-backlog     { --chip-bg:var(--bg-sub);    --chip-fg:var(--muted); --tone:var(--line-2); }
+.s-ready       { --chip-bg:var(--info-soft); --chip-fg:var(--info);  --tone:var(--info); }
+.s-in_progress { --chip-bg:var(--accent-soft);--chip-fg:var(--accent);--tone:var(--accent); }
+.s-review      { --chip-bg:var(--warn-soft); --chip-fg:var(--warn);  --tone:var(--warn); }
+.s-done        { --chip-bg:var(--ok-soft);   --chip-fg:var(--ok);    --tone:var(--ok); }
+.s-cancelled   { --chip-bg:var(--bg-sub);    --chip-fg:var(--faint); --tone:var(--line-2); }
+
+.who { display:flex; align-items:center; gap:7px; }
+.avatar {
+  width:22px; height:22px; border-radius:50%; flex:none; display:grid; place-items:center;
+  font-size:9.5px; font-weight:700; color:#fff; letter-spacing:.02em;
+}
+.mono { font-family:var(--mono); font-size:12px; }
+.muted { color:var(--muted); }
+.faint { color:var(--faint); }
+.danger { color:var(--bad); }
+.strike { text-decoration:line-through; opacity:.55; }
+
+.lease { display:flex; flex-direction:column; gap:4px; min-width:88px; }
+.lease .bar { height:3px; border-radius:3px; background:var(--line); overflow:hidden; }
+.lease .bar i { display:block; height:100%; background:var(--ok); border-radius:3px; transition:width .4s; }
+.lease.low .bar i { background:var(--warn); }
+.lease.gone .bar i { background:var(--bad); }
+.lease .txt { font:11px/1 var(--mono); color:var(--muted); }
+.lease.gone .txt { color:var(--bad); }
+
+#side-detail { white-space:pre-line; }
+.empty { padding:46px 20px; text-align:center; color:var(--muted); }
+.empty svg { width:30px; height:30px; color:var(--faint); margin-bottom:10px; }
+.empty h3 { font-size:14px; margin-bottom:4px; }
+.empty p { margin:0; font-size:12.5px; color:var(--faint); max-width:380px; margin-inline:auto; }
+
+/* ── event feed ──────────────────────────────────────────────────────────── */
+.feed { max-height:560px; overflow:auto; }
+.ev { display:grid; grid-template-columns:22px 1fr auto; gap:11px; padding:11px 18px; border-bottom:1px solid var(--line); }
+.ev:last-child { border-bottom:0; }
+.ev .ico { width:22px; height:22px; border-radius:7px; display:grid; place-items:center; background:var(--chip-bg,var(--bg-sub)); color:var(--chip-fg,var(--muted)); }
+.ev .ico svg { width:12px; height:12px; }
+.ev .msg { min-width:0; }
+.ev .msg b { font-weight:580; }
+.ev .meta { font:11.5px/1.5 var(--mono); color:var(--faint); word-break:break-word; margin-top:2px; }
+.ev .meta:empty { display:none; }
+.ev time { font:11px/1.9 var(--mono); color:var(--faint); white-space:nowrap; }
+.k-pr\.merged     { --chip-bg:var(--accent-soft); --chip-fg:var(--accent); }
+.k-ci\.failed     { --chip-bg:var(--bad-soft);    --chip-fg:var(--bad); }
+.k-task\.claimed  { --chip-bg:var(--info-soft);   --chip-fg:var(--info); }
+.k-task\.done     { --chip-bg:var(--ok-soft);     --chip-fg:var(--ok); }
+.k-task\.review   { --chip-bg:var(--warn-soft);   --chip-fg:var(--warn); }
+.k-finding\.added { --chip-bg:var(--accent-soft); --chip-fg:var(--accent); }
+
+/* ── token reveal ────────────────────────────────────────────────────────── */
+.reveal {
+  margin-top:14px; border:1px solid var(--accent); border-radius:var(--r);
+  background:var(--accent-soft); padding:14px 16px; display:none;
+  animation:rise .2s ease both;
+}
+.reveal.on { display:block; }
+.reveal .lbl { font-size:11.5px; font-weight:620; color:var(--accent); text-transform:uppercase; letter-spacing:.07em; }
+.reveal code {
+  display:block; margin:9px 0 11px; font-family:var(--mono); font-size:12.5px;
+  word-break:break-all; background:var(--panel); border:1px solid var(--line);
+  border-radius:8px; padding:10px 12px; color:var(--ink);
+}
+.reveal p { margin:0 0 10px; font-size:12.5px; color:var(--ink-2); }
+
+/* ── login ───────────────────────────────────────────────────────────────── */
+#gate { position:fixed; inset:0; display:none; place-items:center; padding:24px; z-index:60;
+  background:radial-gradient(1000px 520px at 50% -8%, color-mix(in srgb, var(--accent) 16%, var(--bg)), var(--bg)); }
+body.locked #gate { display:grid; }
+#login { width:100%; max-width:372px; background:var(--panel); border:1px solid var(--line);
+  border-radius:16px; padding:28px; box-shadow:var(--shadow-lg); display:grid; gap:15px; }
+#login .brand { font-size:17px; }
+#login h2 { font-size:16px; }
+#login p.hint { margin:-7px 0 2px; font-size:12.5px; color:var(--muted); }
+#login code { font-family:var(--mono); font-size:12px; color:var(--ink-2); }
+#login .btn { justify-content:center; padding:9px; }
+#login-error { margin:0; font-size:12.5px; color:var(--bad); min-height:0; }
+#login-error:empty { display:none; }
+
+/* ── toast ───────────────────────────────────────────────────────────────── */
+#toast {
+  position:fixed; left:50%; bottom:26px; translate:-50% 12px; z-index:80;
+  background:var(--ink); color:var(--bg); padding:10px 16px; border-radius:10px;
+  font-size:13px; font-weight:500; box-shadow:var(--shadow-lg); max-width:440px;
+  opacity:0; pointer-events:none; transition:opacity .16s, translate .16s;
+}
+#toast.on { opacity:1; translate:-50% 0; }
+#toast.bad { background:var(--bad); color:#fff; }
+
+.pulse { width:7px; height:7px; border-radius:50%; background:var(--ok); flex:none; }
+.pulse.on { animation:beat 2s ease-in-out infinite; }
+@keyframes beat { 0%,100% { box-shadow:0 0 0 0 color-mix(in srgb,var(--ok) 55%,transparent); } 50% { box-shadow:0 0 0 5px transparent; } }
+.skel { background:linear-gradient(90deg,var(--line) 25%,var(--line-2) 37%,var(--line) 63%);
+  background-size:400% 100%; animation:sweep 1.3s ease infinite; border-radius:6px; height:11px; }
+@keyframes sweep { 0% { background-position:100% 50%; } 100% { background-position:0 50%; } }
 </style>
 </head>
 <body class="locked">
 
-<header>
-  <h1>Muster <small>backoffice</small></h1>
-  <label style="flex:0 1 240px">
-    project
-    <select id="project"></select>
-  </label>
-  <span class="spacer" style="flex:1"></span>
-  <label style="flex:0 0 auto; grid-auto-flow: column; align-items: center; gap: 6px">
-    <input id="live" type="checkbox" checked style="min-width:auto"> live
-  </label>
-  <button class="ghost" id="refresh">Refresh</button>
-  <button class="ghost" id="logout">Sign out</button>
-</header>
-
 <div id="gate">
   <form id="login">
-    <h2>Muster backoffice</h2>
-    <p class="dim">Sign in with the backend's <code>ADMIN_PASSWORD</code>.</p>
-    <label>password
+    <div class="brand"><span class="mark" data-icon="logo"></span> Muster</div>
+    <h2>Sign in to the backoffice</h2>
+    <p class="hint">Use the backend's <code>ADMIN_PASSWORD</code>.</p>
+    <label class="field">Password
       <input id="password" type="password" autocomplete="current-password" required autofocus>
     </label>
-    <button>Sign in</button>
-    <p class="dim" id="login-error"></p>
+    <button class="btn" type="submit">Sign in</button>
+    <p id="login-error" role="alert"></p>
   </form>
 </div>
 
-<main>
-  <section>
-    <h2>Projects<span class="spacer"></span>
-      <button class="ghost" id="reconcile" title="Diff GitHub against the store now">Reconcile</button>
-    </h2>
-    <div class="body">
-      <form class="row" id="new-project">
-        <label>slug<input name="slug" required pattern="[a-z0-9-]+" placeholder="web"></label>
-        <label>name<input name="name" required placeholder="Web app"></label>
-        <label>github owner<input name="github_owner" placeholder="acme"></label>
-        <label>repos (comma separated)<input name="github_repos" placeholder="acme/web, acme/api"></label>
-        <label>project #<input name="github_project_number" type="number" min="1" placeholder="7"></label>
-        <button>Create</button>
-      </form>
-      <p class="dim" id="project-detail" style="margin:12px 0 0"></p>
-    </div>
-  </section>
+<div id="app">
+  <header class="topbar">
+    <div class="brand"><span class="mark" data-icon="logo"></span> Muster</div>
+    <label class="field" style="width:220px">
+      <select id="project" aria-label="Project"></select>
+    </label>
+    <span class="grow"></span>
+    <label class="switch" title="Refresh every few seconds">
+      <input id="live" type="checkbox" checked><span id="pulse" class="pulse on"></span><span class="lbl">Live</span>
+    </label>
+    <button class="btn ghost sm" id="refresh" data-icon-btn="refresh" title="Refresh now"><span class="lbl">Refresh</span></button>
+    <button class="btn subtle sm" id="logout" data-icon-btn="logout" title="Sign out"><span class="lbl">Sign out</span></button>
+  </header>
 
-  <div class="cols">
-    <section>
-      <h2>Leads</h2>
-      <div class="body">
-        <form class="row" id="new-lead">
-          <label>machine name<input name="name" required placeholder="alice-laptop"></label>
-          <label style="flex:0 1 110px">expires (days)<input name="expires_in_days" type="number" min="1" placeholder="30"></label>
-          <button>Issue token</button>
-        </form>
-        <div id="token-out">
-          <div class="dim" style="font-size:12px">Shown once — only its hash is stored.</div>
-          <code id="token-value"></code>
-          <div style="margin-top:8px"><button class="ghost" id="copy-token">Copy</button></div>
+  <div class="shell">
+    <nav class="side">
+      <div>
+        <div class="group-label">Workspace</div>
+        <div class="nav" id="nav">
+          <button data-view="overview" class="on" data-icon="grid">Overview</button>
+          <button data-view="board"    data-icon="list">Board <span class="count" id="n-board"></span></button>
+          <button data-view="leads"    data-icon="key">Leads <span class="count" id="n-leads"></span></button>
+          <button data-view="events"   data-icon="activity">Events <span class="count" id="n-events"></span></button>
+          <button data-view="settings" data-icon="cog">Settings</button>
         </div>
       </div>
-      <table><thead><tr><th>Name</th><th>Last seen</th><th>Expires</th><th></th></tr></thead>
-        <tbody id="leads"></tbody></table>
-    </section>
+      <div class="side-foot" style="margin-top:auto">
+        <div class="group-label">Project</div>
+        <p class="mono faint" id="side-detail" style="padding:0 10px; font-size:11px; line-height:1.7"></p>
+      </div>
+    </nav>
 
-    <section>
-      <h2>Board<span class="spacer"></span><span class="dim" id="board-summary"></span></h2>
-      <table><thead><tr><th>Task</th><th>Status</th><th>Claimed by</th><th>Lease</th><th class="num">Tokens</th></tr></thead>
-        <tbody id="board"></tbody></table>
-    </section>
+    <main>
+      <!-- overview -->
+      <section class="view on" data-view="overview">
+        <div class="page-head">
+          <div><h1 id="ov-title">Overview</h1><p id="ov-sub"></p></div>
+        </div>
+        <div class="stats" id="stats"></div>
+        <div class="card">
+          <div class="card-head"><h2>Live activity</h2><span class="sub">newest first</span><span class="grow"></span>
+            <span class="sub mono" id="ov-evcount"></span></div>
+          <div class="feed" id="ov-feed"></div>
+        </div>
+      </section>
+
+      <!-- board -->
+      <section class="view" data-view="board">
+        <div class="page-head">
+          <div><h1>Board</h1><p>What every lead is holding right now. Humans plan in GitHub; this is the agents' view.</p></div>
+          <span class="grow"></span>
+          <label class="field" style="width:230px"><input id="board-filter" type="search" placeholder="Filter by title, repo or lead  ( / )"></label>
+        </div>
+        <div class="card">
+          <div class="card-head"><h2>Tasks</h2><span class="sub" id="board-sub"></span></div>
+          <div class="tablewrap">
+            <table>
+              <thead><tr><th>Task</th><th>Status</th><th>Claimed by</th><th>Lease</th><th class="num">Tokens</th></tr></thead>
+              <tbody id="board"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- leads -->
+      <section class="view" data-view="leads">
+        <div class="page-head">
+          <div><h1>Leads</h1><p>One token per machine. Shown once, stored only as a digest keyed by <code class="mono">ENC_KEY</code>.</p></div>
+        </div>
+        <div class="card">
+          <div class="card-head"><h2>Issue a token</h2></div>
+          <div class="card-body">
+            <form id="new-lead" style="display:flex; gap:10px; align-items:end; flex-wrap:wrap">
+              <label class="field" style="flex:1 1 220px">Machine name
+                <input name="name" required placeholder="alice-laptop" autocomplete="off">
+              </label>
+              <label class="field" style="flex:0 1 130px">Expires in days
+                <input name="expires_in_days" type="number" min="1" placeholder="30">
+              </label>
+              <button class="btn" data-icon-btn="key">Issue token</button>
+            </form>
+            <div class="reveal" id="reveal">
+              <div class="lbl">Copy it now</div>
+              <code id="token-value"></code>
+              <p>This is the only time it is shown. The database keeps a keyed digest, so it cannot be recovered from a backup.</p>
+              <button class="btn sm" id="copy-token" data-icon-btn="copy">Copy</button>
+              <button class="btn ghost sm" id="hide-token">Done</button>
+            </div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-head"><h2>Machines</h2><span class="sub" id="leads-sub"></span></div>
+          <div class="tablewrap">
+            <table>
+              <thead><tr><th>Machine</th><th>Last seen</th><th>Expires</th><th></th></tr></thead>
+              <tbody id="leads"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- events -->
+      <section class="view" data-view="events">
+        <div class="page-head">
+          <div><h1>Events</h1><p>Append-only. The same stream the channel plugin pushes into live sessions.</p></div>
+          <span class="grow"></span>
+          <label class="field" style="width:190px">
+            <select id="event-filter">
+              <option value="">All kinds</option>
+            </select>
+          </label>
+        </div>
+        <div class="card">
+          <div class="card-head"><h2>Event log</h2><span class="sub" id="events-sub"></span></div>
+          <div class="feed" id="events" style="max-height:none"></div>
+        </div>
+      </section>
+
+      <!-- settings -->
+      <section class="view" data-view="settings">
+        <div class="page-head"><div><h1>Settings</h1><p>Projects, repositories and the GitHub bridge.</p></div></div>
+        <div class="card">
+          <div class="card-head"><h2>This project</h2><span class="sub" id="cfg-sub"></span></div>
+          <div class="card-body">
+            <form id="edit-project" style="display:grid; gap:12px; grid-template-columns:repeat(auto-fit,minmax(190px,1fr))">
+              <label class="field">Name<input name="name" required></label>
+              <label class="field">GitHub owner<input name="github_owner" placeholder="acme"></label>
+              <label class="field" style="grid-column:1/-1">Repositories<input name="github_repos" placeholder="acme/web, acme/api"></label>
+              <label class="field">Projects v2 number<input name="github_project_number" type="number" min="1" placeholder="7"></label>
+              <div style="display:flex; align-items:end; gap:8px"><button class="btn" data-icon-btn="save">Save</button></div>
+            </form>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-head"><h2>Reconcile</h2><span class="sub">diff GitHub against the store</span></div>
+          <div class="card-body">
+            <p class="muted" style="margin:0 0 12px; font-size:13px">
+              Webhooks get dropped. A full scan also reports tasks whose issue no longer exists; it never deletes them.
+            </p>
+            <div style="display:flex; gap:8px; flex-wrap:wrap">
+              <button class="btn ghost" id="reconcile" data-icon-btn="sync">Incremental</button>
+              <button class="btn ghost" id="reconcile-full" data-icon-btn="sync">Full scan</button>
+            </div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-head"><h2>New project</h2></div>
+          <div class="card-body">
+            <form id="new-project" style="display:grid; gap:12px; grid-template-columns:repeat(auto-fit,minmax(170px,1fr))">
+              <label class="field">Slug<input name="slug" required pattern="[a-z0-9-]+" placeholder="web"></label>
+              <label class="field">Name<input name="name" required placeholder="Web app"></label>
+              <label class="field">GitHub owner<input name="github_owner" placeholder="acme"></label>
+              <label class="field" style="grid-column:1/-1">Repositories<input name="github_repos" placeholder="acme/web, acme/api"></label>
+              <div style="display:flex; align-items:end"><button class="btn ghost" data-icon-btn="plus">Create</button></div>
+            </form>
+          </div>
+        </div>
+      </section>
+    </main>
   </div>
+</div>
 
-  <section>
-    <h2>Events<span class="spacer"></span><span class="dim" id="event-count"></span></h2>
-    <div id="log"><table><tbody id="events"></tbody></table></div>
-  </section>
-</main>
-
-<div id="toast"></div>
+<div id="toast" role="status" aria-live="polite"></div>
 
 <script>
-// Static page with no data of its own. The operator signs in with
-// ADMIN_PASSWORD; the backend answers with an HttpOnly session cookie, so the
-// secret is never held in JS or in storage where a stray script could read it.
-// All values from the API (issue titles, lead names, event payloads) are
-// written with textContent, never innerHTML — they come from GitHub and from
-// agents, and this page is not where that text gets to run.
+"use strict";
+/**
+ * Backoffice. The operator signs in with ADMIN_PASSWORD and the backend answers
+ * with an HttpOnly session cookie, so no secret is ever held in JS or storage.
+ *
+ * Everything from the API — issue titles, lead names, event payloads — is
+ * written with textContent. It comes from GitHub and from other agents, and
+ * this page is not where that text gets to run. There is no innerHTML in this
+ * file at all: even the icons are built with createElementNS from a constant
+ * table of path data.
+ */
 const $ = (id) => document.getElementById(id);
 const el = (tag, props = {}, ...kids) => {
-  const node = Object.assign(document.createElement(tag), props);
-  for (const kid of kids.flat()) if (kid != null) node.append(kid);
-  return node;
+  const n = Object.assign(document.createElement(tag), props);
+  for (const k of kids.flat()) if (k != null) n.append(k);
+  return n;
 };
 const td = (text, cls) => el("td", cls ? { textContent: text, className: cls } : { textContent: text });
 
+/* ── icons (static markup, never interpolated with data) ──────────────────── */
+const P = {
+  logo:     "M8 22V10l8 6 8-6v12",
+  grid:     "M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z",
+  list:     "M8 6h13M8 12h13M8 18h13M3.5 6h.01M3.5 12h.01M3.5 18h.01",
+  key:      "M21 2l-2 2m-7.6 7.6a5 5 0 11-7 7 5 5 0 017-7zm0 0L15 8m0 0l3 3 3-3-3-3",
+  activity: "M22 12h-4l-3 9L9 3l-3 9H2",
+  cog:      "M12 15a3 3 0 100-6 3 3 0 000 6z M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 11-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 110-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06A1.65 1.65 0 009 4.6h.09A1.65 1.65 0 0010.6 3.09V3a2 2 0 114 0v.09A1.65 1.65 0 0015 4.6a1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06A1.65 1.65 0 0019.4 9v.09a1.65 1.65 0 001.51 1H21a2 2 0 110 4h-.09a1.65 1.65 0 00-1.51 1z",
+  refresh:  "M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15",
+  sync:     "M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15",
+  logout:   "M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9",
+  copy:     "M20 9h-9a2 2 0 00-2 2v9a2 2 0 002 2h9a2 2 0 002-2v-9a2 2 0 00-2-2z M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1",
+  plus:     "M12 5v14M5 12h14",
+  save:     "M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z M17 21v-8H7v8M7 3v5h8",
+  check:    "M20 6L9 17l-5-5",
+  x:        "M18 6L6 18M6 6l12 12",
+  merge:    "M6 3v12a6 6 0 006 6h6M6 9a3 3 0 100-6 3 3 0 000 6zM18 15a3 3 0 100 6 3 3 0 000-6z",
+  alert:    "M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z M12 9v4M12 17h.01",
+  bulb:     "M9 18h6M10 22h4M12 2a7 7 0 00-4 12.7V17h8v-2.3A7 7 0 0012 2z",
+  hand:     "M9 11V6a2 2 0 114 0v5M5 13V9a2 2 0 114 0v4M13 11V7a2 2 0 114 0v6a7 7 0 01-7 7H8a7 7 0 01-7-7v-1a2 2 0 114 0",
+  inbox:    "M22 12h-6l-2 3h-4l-2-3H2 M5.45 5.11L2 12v6a2 2 0 002 2h16a2 2 0 002-2v-6l-3.45-6.89A2 2 0 0016.76 4H7.24a2 2 0 00-1.79 1.11z",
+  dot:      "M12 12h.01"
+};
+function icon(name) {
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("viewBox", "0 0 24 24");
+  svg.setAttribute("fill", "none");
+  svg.setAttribute("stroke", "currentColor");
+  svg.setAttribute("stroke-width", "2");
+  svg.setAttribute("stroke-linecap", "round");
+  svg.setAttribute("stroke-linejoin", "round");
+  for (const d of (P[name] ?? P.dot).split(" M")) {
+    const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    path.setAttribute("d", d.startsWith("M") ? d : "M" + d);
+    svg.append(path);
+  }
+  return svg;
+}
+for (const node of document.querySelectorAll("[data-icon]")) node.prepend(icon(node.dataset.icon));
+for (const node of document.querySelectorAll("[data-icon-btn]")) node.prepend(icon(node.dataset.iconBtn));
+
+/* ── state ───────────────────────────────────────────────────────────────── */
 let projectId = sessionStorage.getItem("muster-project") || "";
-let sinceEvent = 0;
-let logProject = null;
-let seenEvents = 0;
-let chain = Promise.resolve();
-let queued = 0;
+let projects = [];
+let sinceEvent = 0, seenEvents = 0, logProject = null;
+let allEvents = [], boardRows = [];
+let chain = Promise.resolve(), queued = 0;
 
-function unlock() { document.body.classList.remove("locked"); }
-
+const unlock = () => document.body.classList.remove("locked");
 function lock(message) {
   document.body.classList.add("locked");
   $("login-error").textContent = message || "";
   $("password").value = "";
   $("password").focus();
 }
+const locked = () => document.body.classList.contains("locked");
+
+function toast(message, bad) {
+  const t = $("toast");
+  t.textContent = message;
+  t.classList.toggle("bad", !!bad);
+  t.classList.add("on");
+  clearTimeout(toast.timer);
+  toast.timer = setTimeout(() => t.classList.remove("on"), 3400);
+}
+
+async function api(path, options = {}) {
+  const res = await fetch(path, {
+    ...options,
+    credentials: "same-origin",
+    headers: { ...(options.body ? { "content-type": "application/json" } : {}) }
+  });
+  if (res.status === 401) { lock("Session expired. Sign in again."); throw new Error("signed out"); }
+  if (!res.ok) {
+    let detail = res.status + " " + res.statusText;
+    try { const j = await res.json(); if (j.error) detail = j.error; } catch {}
+    throw new Error(detail);
+  }
+  return res.status === 204 ? null : res.json();
+}
+
+/* ── formatting ──────────────────────────────────────────────────────────── */
+function ago(iso) {
+  if (!iso) return "";
+  const secs = (Date.now() - new Date(iso)) / 1000, abs = Math.abs(secs);
+  const [n, u] = abs < 45 ? [abs, "s"] : abs < 3600 ? [abs / 60, "m"]
+              : abs < 86400 ? [abs / 3600, "h"] : [abs / 86400, "d"];
+  return (secs < 0 ? "in " : "") + Math.max(1, Math.round(n)) + u + (secs < 0 ? "" : " ago");
+}
+const nice = (s) => String(s).replace(/_/g, " ");
+const num = (n) => Number(n || 0).toLocaleString();
+
+/** Deterministic colour per name, so the same lead is the same colour everywhere. */
+function hue(name) {
+  let h = 0;
+  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) % 360;
+  return h;
+}
+function avatar(name) {
+  const initials = name.split(/[-_ .]/).filter(Boolean).slice(0, 2).map(p => p[0]).join("").toUpperCase();
+  return el("span", {
+    className: "avatar", textContent: initials || "?",
+    style: `background:linear-gradient(135deg,hsl(${hue(name)} 62% 52%),hsl(${(hue(name) + 38) % 360} 62% 44%))`
+  });
+}
+function statusChip(status) {
+  return el("span", { className: "chip s-" + status },
+    el("span", { className: "dot" }), nice(status));
+}
+
+/* ── views ───────────────────────────────────────────────────────────────── */
+for (const button of $("nav").querySelectorAll("button")) {
+  button.addEventListener("click", () => show(button.dataset.view));
+}
+function show(name) {
+  for (const b of $("nav").querySelectorAll("button")) b.classList.toggle("on", b.dataset.view === name);
+  for (const v of document.querySelectorAll(".view")) v.classList.toggle("on", v.dataset.view === name);
+  location.hash = name;
+}
+window.addEventListener("hashchange", () => {
+  const name = location.hash.slice(1);
+  if (name && document.querySelector(`.view[data-view="${CSS.escape(name)}"]`)) show(name);
+});
+
+/* ── rendering ───────────────────────────────────────────────────────────── */
+function emptyState(iconName, title, body, colspan) {
+  const box = el("div", { className: "empty" }, icon(iconName),
+    el("h3", { textContent: title }), el("p", { textContent: body }));
+  return colspan ? el("tr", {}, el("td", { colSpan: colspan }, box)) : box;
+}
+
+function renderStats(tasks, leads) {
+  const by = {};
+  for (const t of tasks) by[t.status] = (by[t.status] || 0) + 1;
+  const held = tasks.filter(t => t.claimed_by && t.lease_until && new Date(t.lease_until) > new Date()).length;
+  const expired = tasks.filter(t => t.claimed_by && t.lease_until && new Date(t.lease_until) <= new Date()).length;
+  const spend = tasks.reduce((sum, t) => sum + Number(t.cost_tokens || 0), 0);
+  const active = leads.filter(l => !l.revoked_at && l.last_seen_at &&
+    Date.now() - new Date(l.last_seen_at) < 86400000).length;
+
+  // Six tiles, always: a seventh wraps to a lone orphan at most common widths.
+  // A stale lease belongs next to in-progress anyway, since that is the number
+  // it is quietly inflating.
+  const tiles = [
+    { k: "Available", v: by.ready || 0, n: "ready and unclaimed", cls: "s-ready" },
+    { k: "In progress", v: by.in_progress || 0, cls: "s-in_progress",
+      n: expired ? `${held} live · ${expired} expired`
+                 : held + " lease" + (held === 1 ? "" : "s") + " live" },
+    { k: "In review", v: by.review || 0, n: "PR open", cls: "s-review" },
+    { k: "Done", v: by.done || 0, n: "merged or closed", cls: "s-done" },
+    { k: "Leads", v: active, n: "seen in the last day", cls: "" },
+    { k: "Tokens", v: num(spend), n: "spent across all tasks", cls: "" }
+  ];
+
+  $("stats").replaceChildren(...tiles.map(t => el("div", { className: "stat " + t.cls },
+    el("div", { className: "k", textContent: t.k }),
+    el("div", { className: "v", textContent: String(t.v) }),
+    el("div", { className: "n", textContent: t.n }))));
+}
+
+function leaseCell(task) {
+  if (!task.lease_until) return el("td", {}, el("span", { className: "faint", textContent: "—" }));
+  const left = (new Date(task.lease_until) - Date.now()) / 1000;
+  const full = 1800;                                   // CLAIM_LEASE_SECONDS default
+  const pct = Math.max(0, Math.min(100, (left / full) * 100));
+  const cls = left <= 0 ? "lease gone" : left < 300 ? "lease low" : "lease";
+  return el("td", {}, el("div", { className: cls },
+    el("div", { className: "bar" }, el("i", { style: `width:${left <= 0 ? 100 : pct}%` })),
+    el("div", { className: "txt", textContent: left <= 0 ? "expired " + ago(task.lease_until) : ago(task.lease_until) })));
+}
+
+function renderBoard() {
+  const q = $("board-filter").value.trim().toLowerCase();
+  const rows = boardRows.filter(t => !q ||
+    [t.title, t.github_repo, t.claimed_by, t.status].some(v => String(v || "").toLowerCase().includes(q)));
+
+  $("n-board").textContent = boardRows.length || "";
+  $("board-sub").textContent = q ? `${rows.length} of ${boardRows.length}` : `${boardRows.length} total`;
+
+  if (!rows.length) {
+    $("board").replaceChildren(boardRows.length
+      ? emptyState("inbox", "Nothing matches", "Try a different filter.", 5)
+      : emptyState("inbox", "No tasks yet", "Tasks arrive from GitHub issues once the webhook is wired up, or from a full reconcile.", 5));
+    return;
+  }
+  $("board").replaceChildren(...rows.map(t => el("tr", {},
+    el("td", {},
+      el("div", { className: "t-title", textContent: t.title }),
+      t.github_repo ? el("div", { className: "t-sub", textContent: `${t.github_repo}#${t.github_issue_number}` }) : null),
+    el("td", {}, statusChip(t.status)),
+    el("td", {}, t.claimed_by
+      ? el("div", { className: "who" }, avatar(t.claimed_by), el("span", { textContent: t.claimed_by }))
+      : el("span", { className: "faint", textContent: "unclaimed" })),
+    leaseCell(t),
+    td(Number(t.cost_tokens) > 0 ? num(t.cost_tokens) : "—",
+       "num " + (Number(t.cost_tokens) > 0 ? "mono" : "faint")))));
+}
+
+function renderLeads(leads) {
+  $("n-leads").textContent = leads.filter(l => !l.revoked_at).length || "";
+  $("leads-sub").textContent = `${leads.filter(l => !l.revoked_at).length} active, ${leads.filter(l => l.revoked_at).length} revoked`;
+
+  if (!leads.length) {
+    $("leads").replaceChildren(emptyState("key", "No machines yet",
+      "Issue a token per developer machine. Each one is shown exactly once.", 4));
+    return;
+  }
+  $("leads").replaceChildren(...leads.map(l => {
+    const revoked = !!l.revoked_at;
+    const expired = l.expires_at && new Date(l.expires_at) < new Date();
+    const button = el("button", {
+      className: "btn " + (revoked ? "subtle sm" : "danger sm"),
+      textContent: revoked ? "Revoked" : "Revoke", disabled: revoked
+    });
+    if (!revoked) button.addEventListener("click", async () => {
+      if (!confirm(`Revoke ${l.name}?\n\nIts next MCP call and its event stream both stop working.`)) return;
+      try { await api("/admin/leads/" + l.id, { method: "DELETE" }); toast("Revoked " + l.name); refresh(); }
+      catch (err) { toast(err.message, true); }
+    });
+    return el("tr", {},
+      el("td", {}, el("div", { className: "who" }, avatar(l.name),
+        el("span", { className: revoked ? "strike" : "", textContent: l.name }))),
+      el("td", {}, l.last_seen_at
+        ? el("span", { className: "mono muted", textContent: ago(l.last_seen_at) })
+        : el("span", { className: "faint", textContent: "never used" })),
+      el("td", {}, el("span", {
+        className: expired ? "mono danger" : "mono muted",
+        textContent: l.expires_at ? (expired ? "expired " : "") + ago(l.expires_at) : "no expiry"
+      })),
+      el("td", { style: "text-align:right" }, button));
+  }));
+}
+
+const EVENT_ICON = {
+  "pr.merged": "merge", "ci.failed": "alert", "finding.added": "bulb",
+  "task.claimed": "hand", "task.released": "x", "task.done": "check",
+  "task.review": "list", "task.recovered": "refresh", "task.orphaned": "alert",
+  "reconcile.completed": "sync", "github.item.edited": "cog"
+};
+function eventRow(e) {
+  const p = e.payload || {};
+  let text;
+  switch (e.kind) {
+    case "pr.merged":     text = `PR #${p.number} merged into ${p.base}`; break;
+    case "ci.failed":     text = `CI ${p.conclusion} on ${p.branch}`; break;
+    case "finding.added": text = `Finding from ${e.actor}`; break;
+    case "task.claimed":  text = `${e.actor} claimed ${p.title || "a task"}`; break;
+    case "task.released": text = `${e.actor} released a task`; break;
+    case "task.done":     text = p.repo ? "Issue closed on GitHub" : "Task done"; break;
+    case "task.recovered": text = "Task recovered by reconcile"; break;
+    case "task.orphaned":  text = "Task has no matching issue"; break;
+    case "reconcile.completed": text = "Reconcile finished"; break;
+    case "task.review":   text = `${e.actor} opened a PR`; break;
+    default:              text = nice(e.kind);
+  }
+  // The headline already carries the title for a claim; repeating it below is
+  // just noise, and an empty .meta collapses.
+  const detail = e.kind === "task.claimed" ? (p.repo && p.issue ? `${p.repo}#${p.issue}` : "")
+    : e.kind === "finding.added" ? String(p.content ?? "")
+    : e.kind === "pr.merged" ? `${p.repo} · ${p.title ?? ""}`
+    : e.kind === "ci.failed" ? `${p.repo} · ${String(p.sha ?? "").slice(0, 7)}`
+    : p.repo && p.issue ? `${p.repo}#${p.issue}${p.note ? " · " + p.note : ""}`
+    : p.note ? String(p.note)
+    : p.title ? String(p.title)
+    : p.pr_url ? String(p.pr_url)
+    : JSON.stringify(p);
+
+  return el("div", { className: "ev k-" + e.kind.replace(".", "\\.") },
+    el("div", { className: "ico k-" + e.kind }, icon(EVENT_ICON[e.kind] || "dot")),
+    el("div", { className: "msg" },
+      el("div", {}, el("b", { textContent: text })),
+      el("div", { className: "meta", textContent: detail })),
+    el("time", { dateTime: e.created_at, textContent: ago(e.created_at) }));
+}
+
+function renderEvents() {
+  const kind = $("event-filter").value;
+  const list = (kind ? allEvents.filter(e => e.kind === kind) : allEvents).slice().reverse();
+  $("n-events").textContent = allEvents.length || "";
+  $("ov-evcount").textContent = seenEvents ? seenEvents + " events" : "";
+  $("events-sub").textContent = kind ? `${list.length} of ${allEvents.length}` : `${allEvents.length} shown`;
+
+  const kinds = [...new Set(allEvents.map(e => e.kind))].sort();
+  if (kinds.join() !== renderEvents.kinds) {
+    renderEvents.kinds = kinds.join();
+    const keep = $("event-filter").value;
+    $("event-filter").replaceChildren(el("option", { value: "", textContent: "All kinds" }),
+      ...kinds.map(k => el("option", { value: k, textContent: k })));
+    $("event-filter").value = keep;
+  }
+
+  if (!list.length) {
+    const box = () => emptyState("activity", "Nothing yet",
+      "Claims, merges, CI failures and findings land here as they happen.");
+    $("events").replaceChildren(box());
+    $("ov-feed").replaceChildren(box());
+    return;
+  }
+  $("events").replaceChildren(...list.map(eventRow));
+  $("ov-feed").replaceChildren(...list.slice(0, 12).map(eventRow));
+}
+
+function renderProjectMeta() {
+  const p = projects.find(x => x.id === projectId);
+  if (!p) return;
+  $("ov-title").textContent = p.name;
+  $("ov-sub").textContent = p.github_repos?.length
+    ? p.github_repos.join(" · ")
+    : "No repositories wired up yet — add them in Settings.";
+  $("side-detail").textContent = [
+    p.slug,
+    p.github_project_number ? "Projects v2 #" + p.github_project_number : "no board",
+    p.reconciled_at ? "reconciled " + ago(p.reconciled_at) : "never reconciled"
+  ].join("\n");
+  $("cfg-sub").textContent = p.slug;
+
+  const form = $("edit-project");
+  form.name.value = p.name ?? "";
+  form.github_owner.value = p.github_owner ?? "";
+  form.github_repos.value = (p.github_repos ?? []).join(", ");
+  form.github_project_number.value = p.github_project_number ?? "";
+}
+
+/* ── loading ─────────────────────────────────────────────────────────────── */
+async function loadProjects() {
+  try { projects = await api("/admin/projects"); }
+  catch (err) { if (!locked()) toast(err.message, true); return; }
+
+  $("project").replaceChildren(...projects.map(p =>
+    el("option", { value: p.id, textContent: p.name })));
+  if (!projects.some(p => p.id === projectId)) projectId = projects[0]?.id || "";
+  $("project").value = projectId;
+  sessionStorage.setItem("muster-project", projectId);
+
+  if (!projectId) {
+    $("stats").replaceChildren();
+    $("ov-title").textContent = "No projects yet";
+    $("ov-sub").textContent = "Create one in Settings to get started.";
+    show("settings");
+    return;
+  }
+  renderProjectMeta();
+  await refresh();
+}
+
+function refresh() {
+  if (queued > 1) return chain;
+  queued++;
+  chain = chain.catch(() => {}).then(doRefresh).finally(() => { queued--; });
+  return chain;
+}
+
+async function doRefresh() {
+  if (!projectId || locked()) return;
+  if (logProject !== projectId) {
+    logProject = projectId; sinceEvent = 0; seenEvents = 0; allEvents = [];
+  }
+  try {
+    const [board, leads, events] = await Promise.all([
+      api(`/admin/projects/${projectId}/board`),
+      api(`/admin/projects/${projectId}/leads`),
+      api(`/admin/projects/${projectId}/events?since=${sinceEvent}`)
+    ]);
+    boardRows = board;
+    if (events.length) {
+      sinceEvent = events[events.length - 1].id;
+      seenEvents += events.length;
+      allEvents.push(...events);
+      if (allEvents.length > 400) allEvents = allEvents.slice(-400);
+    }
+    renderStats(board, leads);
+    renderBoard();
+    renderLeads(leads);
+    renderEvents();
+  } catch (err) {
+    if (locked()) return;
+    toast(err.message, true);
+    $("live").checked = false;
+    $("pulse").classList.remove("on");
+  }
+}
+
+/* ── interactions ────────────────────────────────────────────────────────── */
+$("project").addEventListener("change", (e) => {
+  projectId = e.target.value;
+  sessionStorage.setItem("muster-project", projectId);
+  renderProjectMeta();
+  refresh();
+});
+$("refresh").addEventListener("click", () => refresh());
+$("live").addEventListener("change", (e) => $("pulse").classList.toggle("on", e.target.checked));
+setInterval(() => { if ($("live").checked && !locked()) refresh(); }, 3000);
+// Relative times go stale on an idle tab; the data has not changed, only "ago".
+setInterval(() => { if (!locked() && boardRows.length) { renderBoard(); renderEvents(); } }, 30000);
+
+$("board-filter").addEventListener("input", renderBoard);
+$("event-filter").addEventListener("change", renderEvents);
+document.addEventListener("keydown", (e) => {
+  if (e.key === "/" && !/^(INPUT|SELECT|TEXTAREA)$/.test(e.target.tagName)) {
+    e.preventDefault(); show("board"); $("board-filter").focus();
+  }
+  if (e.key === "Escape" && e.target === $("board-filter")) {
+    $("board-filter").value = ""; renderBoard(); $("board-filter").blur();
+  }
+});
 
 $("login").addEventListener("submit", async (e) => {
   e.preventDefault();
@@ -234,16 +921,12 @@ $("login").addEventListener("submit", async (e) => {
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ password: $("password").value })
     });
-    if (!res.ok) {
-      const body = await res.json().catch(() => ({}));
-      throw new Error(body.error || "sign in failed");
-    }
+    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || "Sign in failed");
     $("password").value = "";
     unlock();
     await loadProjects();
-  } catch (err) {
-    $("login-error").textContent = err.message;
-  } finally { button.disabled = false; }
+  } catch (err) { $("login-error").textContent = err.message; }
+  finally { button.disabled = false; }
 });
 
 $("logout").addEventListener("click", async () => {
@@ -252,186 +935,9 @@ $("logout").addEventListener("click", async () => {
   lock("");
 });
 
-function toast(message, bad) {
-  const t = $("toast");
-  t.textContent = message;
-  t.style.background = bad ? "var(--bad)" : "var(--ink)";
-  t.classList.add("show");
-  clearTimeout(toast.timer);
-  toast.timer = setTimeout(() => t.classList.remove("show"), 3200);
-}
-
-async function api(path, options = {}) {
-  const res = await fetch(path, {
-    ...options,
-    credentials: "same-origin",
-    headers: { ...(options.body ? { "content-type": "application/json" } : {}) }
-  });
-  if (res.status === 401) {
-    // The session expired or the backend's password changed under us.
-    lock("Session expired. Sign in again.");
-    throw new Error("signed out");
-  }
-  if (!res.ok) {
-    let detail = res.status + " " + res.statusText;
-    try { const j = await res.json(); if (j.error) detail = j.error; } catch {}
-    throw new Error(detail);
-  }
-  return res.status === 204 ? null : res.json();
-}
-
-const ago = (iso) => {
-  if (!iso) return "";
-  const secs = (Date.now() - new Date(iso)) / 1000;
-  const abs = Math.abs(secs);
-  const [n, unit] = abs < 60 ? [abs, "s"] : abs < 3600 ? [abs / 60, "m"] : abs < 86400 ? [abs / 3600, "h"] : [abs / 86400, "d"];
-  return (secs < 0 ? "in " : "") + Math.round(n) + unit + (secs < 0 ? "" : " ago");
-};
-
-async function loadProjects() {
-  let projects;
-  try { projects = await api("/admin/projects"); }
-  catch (err) {
-    if (!document.body.classList.contains("locked")) toast(err.message, true);
-    return;
-  }
-
-  const select = $("project");
-  select.replaceChildren(...projects.map(p => el("option", { value: p.id, textContent: p.slug + " — " + p.name })));
-  if (!projects.some(p => p.id === projectId)) projectId = projects[0]?.id || "";
-  select.value = projectId;
-  sessionStorage.setItem("muster-project", projectId);
-
-  const current = projects.find(p => p.id === projectId);
-  $("project-detail").textContent = current
-    ? [current.github_repos?.length ? "repos: " + current.github_repos.join(", ") : "no repos",
-       current.github_project_number ? "Projects v2 #" + current.github_project_number : "no board wired",
-       current.reconciled_at ? "reconciled " + ago(current.reconciled_at) : "never reconciled"].join("  ·  ")
-    : "";
-
-  await refresh();
-}
-
-$("project").addEventListener("change", (e) => {
-  projectId = e.target.value;
-  sessionStorage.setItem("muster-project", projectId);
-  loadProjects();
-});
-
-function renderBoard(tasks) {
-  const counts = {};
-  for (const t of tasks) counts[t.status] = (counts[t.status] || 0) + 1;
-  $("board-summary").textContent = Object.entries(counts).map(([s, n]) => n + " " + s).join(" · ");
-
-  $("board").replaceChildren(...tasks.map(t => {
-    const where = t.github_repo ? t.github_repo + "#" + t.github_issue_number : "";
-    const expired = t.lease_until && new Date(t.lease_until) < new Date();
-    return el("tr", { className: "s" + "-" + t.status },
-      el("td", {}, el("div", { textContent: t.title }),
-                   el("div", { className: "dim mono", textContent: where })),
-      el("td", {}, el("span", { className: "pill", textContent: t.status })),
-      td(t.claimed_by || "", "dim"),
-      el("td", { className: t.lease_until && expired ? "stale mono" : "dim mono",
-                 textContent: t.lease_until ? (expired ? "expired " : "") + ago(t.lease_until) : "" }),
-      td(t.cost_tokens ? Number(t.cost_tokens).toLocaleString() : "", "num dim"));
-  }));
-  if (!tasks.length) $("board").replaceChildren(el("tr", {}, el("td", { colSpan: 5, className: "empty", textContent: "No tasks yet. They arrive from GitHub issues." })));
-}
-
-function renderLeads(leads) {
-  $("leads").replaceChildren(...leads.map(l => {
-    const revoked = !!l.revoked_at;
-    const expired = l.expires_at && new Date(l.expires_at) < new Date();
-    const revoke = el("button", { className: "danger", textContent: revoked ? "revoked" : "Revoke", disabled: revoked });
-    revoke.addEventListener("click", async () => {
-      if (!confirm(`Revoke ${l.name}? Its next MCP call and its event stream both stop working.`)) return;
-      try { await api("/admin/leads/" + l.id, { method: "DELETE" }); toast("revoked " + l.name); refresh(); }
-      catch (err) { toast(err.message, true); }
-    });
-    return el("tr", {},
-      el("td", {}, el("span", { textContent: l.name, style: revoked ? "text-decoration:line-through" : "" })),
-      td(l.last_seen_at ? ago(l.last_seen_at) : "never", "dim"),
-      el("td", { className: expired ? "stale" : "dim",
-                 textContent: l.expires_at ? (expired ? "expired " : "") + ago(l.expires_at) : "never" }),
-      el("td", {}, revoke));
-  }));
-  if (!leads.length) $("leads").replaceChildren(el("tr", {}, el("td", { colSpan: 4, className: "empty", textContent: "No leads yet." })));
-}
-
-function renderEvents(events) {
-  if (!events.length) return;
-  sinceEvent = events[events.length - 1].id;
-  seenEvents += events.length;
-  $("event-count").textContent = seenEvents + " shown";
-  // Ascending from the API; newest on top here.
-  const rows = events.slice().reverse().map(e => el("tr", {},
-    el("td", { className: "dim mono", textContent: new Date(e.created_at).toLocaleTimeString() }),
-    el("td", {}, el("span", { className: "pill", textContent: e.kind })),
-    td(e.actor, "dim"),
-    td(JSON.stringify(e.payload), "payload mono")));
-  $("events").prepend(...rows);
-  // Keep the log from growing without bound in a tab left open all day.
-  while ($("events").childElementCount > 300) $("events").lastElementChild.remove();
-}
-
-// Refreshes run one at a time and in order: a project switch must not be
-// dropped because a poll was already in flight, but a slow backend must not let
-// the 3s timer pile requests up either, so at most one waits behind the runner.
-function refresh() {
-  if (queued > 1) return chain;
-  queued++;
-  chain = chain.catch(() => {}).then(doRefresh).finally(() => { queued--; });
-  return chain;
-}
-
-async function doRefresh() {
-  if (!projectId || document.body.classList.contains("locked")) return;
-  if (logProject !== projectId) {
-    // Switching projects starts the log over, and doing it here rather than in
-    // loadProjects keeps it ordered with respect to whatever refresh is already
-    // queued — otherwise that one advances sinceEvent past the rows just cleared.
-    logProject = projectId; sinceEvent = 0; seenEvents = 0;
-    $("events").replaceChildren();
-  }
-  try {
-    const [board, leads, events] = await Promise.all([
-      api(`/admin/projects/${projectId}/board`),
-      api(`/admin/projects/${projectId}/leads`),
-      api(`/admin/projects/${projectId}/events?since=${sinceEvent}`)
-    ]);
-    renderBoard(board); renderLeads(leads); renderEvents(events);
-  } catch (err) {
-    if (document.body.classList.contains("locked")) return;   // the gate says it
-    toast(err.message, true);
-    $("live").checked = false;   // stop hammering a backend that is saying no
-  }
-}
-
-$("refresh").addEventListener("click", refresh);
-setInterval(() => { if ($("live").checked) refresh(); }, 3000);
-
-$("new-project").addEventListener("submit", async (e) => {
-  e.preventDefault();
-  const form = new FormData(e.target);
-  const body = {
-    slug: form.get("slug").trim(),
-    name: form.get("name").trim(),
-    github_repos: String(form.get("github_repos") || "").split(",").map(s => s.trim()).filter(Boolean)
-  };
-  if (form.get("github_owner")) body.github_owner = String(form.get("github_owner")).trim();
-  if (form.get("github_project_number")) body.github_project_number = Number(form.get("github_project_number"));
-  try {
-    const created = await api("/admin/projects", { method: "POST", body: JSON.stringify(body) });
-    e.target.reset();
-    projectId = created.id;
-    toast("created " + created.slug);
-    loadProjects();
-  } catch (err) { toast(err.message, true); }
-});
-
 $("new-lead").addEventListener("submit", async (e) => {
   e.preventDefault();
-  if (!projectId) return toast("pick a project first", true);
+  if (!projectId) return toast("Create a project first", true);
   const form = new FormData(e.target);
   const body = { name: String(form.get("name")).trim() };
   if (form.get("expires_in_days")) body.expires_in_days = Number(form.get("expires_in_days"));
@@ -439,31 +945,75 @@ $("new-lead").addEventListener("submit", async (e) => {
     const lead = await api(`/admin/projects/${projectId}/leads`, { method: "POST", body: JSON.stringify(body) });
     e.target.reset();
     $("token-value").textContent = lead.token;
-    $("token-out").classList.add("show");
+    $("reveal").classList.add("on");
     refresh();
   } catch (err) { toast(err.message, true); }
 });
-
 $("copy-token").addEventListener("click", async () => {
-  try { await navigator.clipboard.writeText($("token-value").textContent); toast("copied"); }
-  catch { toast("copy failed — select it by hand", true); }
+  try {
+    await navigator.clipboard.writeText($("token-value").textContent);
+    toast("Token copied to the clipboard");
+  } catch { toast("Copy failed — select it by hand", true); }
+});
+$("hide-token").addEventListener("click", () => {
+  $("reveal").classList.remove("on");
+  $("token-value").textContent = "";
 });
 
-$("reconcile").addEventListener("click", async () => {
-  const full = confirm("Full scan? OK runs a complete scan (also reports orphaned tasks); Cancel runs the usual incremental pass.");
-  $("reconcile").disabled = true;
-  try { await api("/admin/reconcile" + (full ? "?full=1" : ""), { method: "POST" }); toast("reconcile finished"); refresh(); }
-  catch (err) { toast(err.message, true); }
-  finally { $("reconcile").disabled = false; }
+$("new-project").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const form = new FormData(e.target);
+  const body = {
+    slug: String(form.get("slug")).trim(),
+    name: String(form.get("name")).trim(),
+    github_repos: String(form.get("github_repos") || "").split(",").map(s => s.trim()).filter(Boolean)
+  };
+  if (form.get("github_owner")) body.github_owner = String(form.get("github_owner")).trim();
+  try {
+    const created = await api("/admin/projects", { method: "POST", body: JSON.stringify(body) });
+    e.target.reset();
+    projectId = created.id;
+    toast("Created " + created.name);
+    await loadProjects();
+    show("overview");
+  } catch (err) { toast(err.message, true); }
 });
 
-// A reload with a live cookie should land on the board, not the login form.
+$("edit-project").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const form = new FormData(e.target);
+  const body = {
+    name: String(form.get("name")).trim(),
+    github_owner: String(form.get("github_owner") || "").trim() || null,
+    github_repos: String(form.get("github_repos") || "").split(",").map(s => s.trim()).filter(Boolean),
+    github_project_number: form.get("github_project_number") ? Number(form.get("github_project_number")) : null
+  };
+  try {
+    await api(`/admin/projects/${projectId}`, { method: "PATCH", body: JSON.stringify(body) });
+    toast("Saved");
+    await loadProjects();
+  } catch (err) { toast(err.message, true); }
+});
+
+for (const [id, full] of [["reconcile", false], ["reconcile-full", true]]) {
+  $(id).addEventListener("click", async () => {
+    $(id).disabled = true;
+    try {
+      await api("/admin/reconcile" + (full ? "?full=1" : ""), { method: "POST" });
+      toast(full ? "Full reconcile finished" : "Reconcile finished");
+      await loadProjects();
+    } catch (err) { toast(err.message, true); }
+    finally { $(id).disabled = false; }
+  });
+}
+
+/* ── boot ────────────────────────────────────────────────────────────────── */
+if (location.hash.slice(1)) {
+  const name = location.hash.slice(1);
+  if (document.querySelector(`.view[data-view="${CSS.escape(name)}"]`)) show(name);
+}
 fetch("/admin/session", { credentials: "same-origin" })
-  .then(res => {
-    if (!res.ok) return lock("");
-    unlock();                 // the gate has to lift, not just the data load
-    return loadProjects();
-  })
+  .then(res => { if (!res.ok) return lock(""); unlock(); return loadProjects(); })
   .catch(() => lock("Could not reach the backend."));
 </script>
 </body>

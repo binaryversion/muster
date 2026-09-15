@@ -47,8 +47,9 @@ humans plan on:
   the laptop walks out of the building. Nothing recoverable is stored: tokens
   live in the database only as digests keyed by `ENC_KEY`, so a stolen dump
   cannot even be used to test a guess.
-- **You can see what the agents are doing.** A board showing every claim, lease
-  and token spend, and an append-only event log.
+- **You can see what the agents are doing.** A backoffice with a live board —
+  every claim, every lease counting down, token spend per task — and the event
+  log as it happens.
 
 ## How it fits together
 
