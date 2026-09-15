@@ -3,6 +3,45 @@ import { z } from "zod";
 import { query, emit } from "../db.js";
 import type { Lead } from "../auth.js";
 
+/**
+ * Full text first, substring second.
+ *
+ * `websearch_to_tsquery` handles the way a lead actually asks — quoted phrases,
+ * `or`, a leading `-` to exclude — and stems, so "failing tests" finds "the
+ * test suite fails". It is useless for the other half of what agents search
+ * for, though: `ENOSPC`, `--no-sandbox`, a port number. Those get tokenised
+ * away or stemmed into nothing, so when full text returns too little we also
+ * run the old substring match, which a trigram index now serves.
+ *
+ * Both are unioned rather than chained so one good full-text hit never hides a
+ * literal match, and rank orders the result.
+ */
+async function searchFindings(projectId: string, q: string, limit: number) {
+  return query(
+    `WITH fts AS (
+       SELECT f.id, ts_rank(f.search, websearch_to_tsquery('english', $2)) AS rank
+       FROM findings f
+       WHERE f.project_id = $1 AND f.search @@ websearch_to_tsquery('english', $2)
+     ),
+     literal AS (
+       SELECT f.id, 0.0::real AS rank
+       FROM findings f
+       WHERE f.project_id = $1
+         AND (f.content ILIKE '%' || $2 || '%' OR lower($2) = ANY(SELECT lower(t) FROM unnest(f.tags) t))
+     ),
+     hits AS (
+       SELECT id, max(rank) AS rank FROM (SELECT * FROM fts UNION ALL SELECT * FROM literal) u
+       GROUP BY id
+     )
+     SELECT f.id, f.tags, f.content, f.created_at, l.name AS lead
+     FROM hits h
+     JOIN findings f ON f.id = h.id
+     LEFT JOIN leads l ON l.id = f.lead_id
+     ORDER BY h.rank DESC, f.created_at DESC
+     LIMIT $3`,
+    [projectId, q, limit]);
+}
+
 export function registerFindingTools(server: McpServer, lead: Lead) {
   server.registerTool(
     "muster_add_finding",
@@ -25,16 +64,12 @@ export function registerFindingTools(server: McpServer, lead: Lead) {
     "muster_search_findings",
     {
       title: "Search findings",
-      description: "Full-text search over findings shared by all leads in this project. Check here before debugging environment or tooling problems.",
+      description: "Full-text search over findings shared by all leads in this project. Check here before debugging environment or tooling problems. Supports quoted phrases, OR, and a leading - to exclude; exact strings like an error code or a flag also match literally.",
       inputSchema: { q: z.string().min(2).max(200), limit: z.number().int().min(1).max(50).default(10) },
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false }
     },
     async ({ q, limit }) => {
-      const rows = await query(
-        `SELECT f.id, f.tags, f.content, f.created_at, l.name AS lead
-         FROM findings f LEFT JOIN leads l ON l.id = f.lead_id
-         WHERE f.project_id = $1 AND (f.content ILIKE '%' || $2 || '%' OR $2 = ANY(f.tags))
-         ORDER BY f.created_at DESC LIMIT $3`, [lead.project_id, q, limit]);
+      const rows = await searchFindings(lead.project_id, q, limit);
       return { content: [{ type: "text", text: JSON.stringify(rows, null, 2) }], structuredContent: { findings: rows } };
     }
   );
