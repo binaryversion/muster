@@ -15,6 +15,7 @@ import { query, emit } from "../db.js";
 import { makeApp, githubConfigured } from "../github/app.js";
 import { priorityFromLabels } from "../github/issue.js";
 import { syncDependencies } from "../github/deps.js";
+import { pruneWebhookDeliveries } from "../webhooks/github.js";
 
 export interface IssueSnapshot {
   repo: string;
@@ -225,6 +226,7 @@ export async function pruneEvents(): Promise<number> {
 
 export async function reconcileOnce(opts: { full?: boolean } = {}) {
   await pruneEvents().catch(err => console.error("reconcile: prune failed", err?.message ?? err));
+  await pruneWebhookDeliveries().catch(err => console.error("reconcile: webhook prune failed", err?.message ?? err));
 
   const projects = await query<{ id: string; slug: string; github_repos: string[]; reconciled_at: string | null }>(
     "SELECT id, slug, github_repos, reconciled_at FROM projects WHERE cardinality(github_repos) > 0");
