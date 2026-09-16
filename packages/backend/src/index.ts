@@ -1,7 +1,7 @@
 import express from "express";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
-import { githubWebhookRouter } from "./webhooks/github.js";
+import { githubWebhookRouter, replayUnfinishedDeliveries } from "./webhooks/github.js";
 import { adminRouter } from "./admin/index.js";
 import { eventsRouter } from "./events/sse.js";
 import { startSyncLoop } from "./sync/github.js";
@@ -28,5 +28,12 @@ app.use(eventsRouter);
 
 startSyncLoop();
 startReconcileLoop();
+
+// Anything a previous process accepted but never finished. GitHub will not
+// retry a delivery it was told we had, so this is the only chance to finish it.
+// Not awaited: a slow replay must not hold up the port opening and start
+// failing health checks.
+replayUnfinishedDeliveries()
+  .catch(err => console.error("webhooks: replay on startup failed", err));
 const port = Number(process.env.BACKEND_PORT ?? 8080);
 app.listen(port, () => console.log(`muster-backend listening on :${port}`));

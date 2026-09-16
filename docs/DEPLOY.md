@@ -116,16 +116,28 @@ Two things to check on your platform:
    start without App credentials and say so once in the log rather than failing
    on every tick.
 
-## Running more than one backend
+## One backend, on purpose
 
-Sessions and login throttling live in Postgres, so a second replica works:
-sign in against one and the cookie is valid on all of them, sign out and it dies
-everywhere, and a client's failed logins are counted once rather than once per
-process.
+Muster coordinates a team, not a public workload. One server is the intended
+shape: a handful of leads, one event stream each, a background mirror and a
+nightly reconcile. Nothing here is sized by traffic.
 
-The GitHub mirror and the reconcile are the exception — both assume a single
-writer. Run them on one instance (`GITHUB_SYNC_ENABLED` / `GITHUB_RECONCILE_ENABLED`
-true there, false elsewhere) and the rest can scale freely.
+That is a design decision rather than a limitation to work around, and the
+consequence worth knowing is what happens when the one server restarts:
+
+- **While it is down, nothing is lost.** GitHub gets a connection error, treats
+  the delivery as failed, and redelivers.
+- **A delivery accepted just before it stopped is finished on the next start**,
+  if it is younger than `WEBHOOK_REPLAY_WINDOW_MIN`. Older ones are reported in
+  the log and dropped, because pushing a stale "PR merged, rebase now" into a
+  session that has long since moved on is worse than not pushing it.
+- **Leads reconnect on their own.** The channel plugin resumes from the last
+  event id it saw, so nothing in the log is skipped.
+
+If a second instance is ever wanted, the parts that would need attention first
+are the mirror and the reconcile: both would duplicate GitHub API calls against
+a rate limit that is shared per installation. Sessions, login throttling,
+webhook dedupe and the event stream already work correctly across processes.
 
 ## Upgrading
 

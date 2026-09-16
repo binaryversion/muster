@@ -178,6 +178,24 @@ pass "task appeared in muster_list_available_tasks ($task_id)"
   && pass "redelivered webhook is deduped on x-github-delivery" \
   || fail "redelivery was not deduped"
 
+if [ -n "${DATABASE_URL:-}" ] && command -v psql >/dev/null; then
+  # The body is kept only until the work is done, so a finished delivery must
+  # not still be holding one.
+  [ "$(psql "$DATABASE_URL" -X -t -A -c \
+       "SELECT processed_at IS NOT NULL AND payload IS NULL FROM webhook_deliveries WHERE delivery_id = '$delivery'")" = "t" ] \
+    && pass "a processed delivery is stamped and its payload dropped" \
+    || fail "a processed delivery kept its payload or was never stamped"
+
+  # The bug this replaced: an accepted delivery that never finished used to be
+  # refused on retry, losing it for good.
+  psql "$DATABASE_URL" -X -q -c \
+    "INSERT INTO webhook_deliveries (delivery_id, event, payload, claimed_at, received_at)
+     VALUES ('$delivery-orphan', 'issues', '{}', now() - interval '10 minutes', now() - interval '10 minutes')" >/dev/null
+  [ "$(post_hook "$delivery-orphan")" = "202" ] \
+    && pass "a delivery that was accepted but never processed is retried, not refused" \
+    || fail "an unfinished delivery was refused as a duplicate"
+fi
+
 step "3. MCP: claim / heartbeat / complete"
 claim=$(mcp "$TOKEN_A" muster_claim_task "$(jq -nc --arg t "$task_id" '{task_id:$t}')")
 [ "$(echo "$claim" | mcp_iserror)" = "no" ] || fail "lead A could not claim: $(echo "$claim" | mcp_text)"
